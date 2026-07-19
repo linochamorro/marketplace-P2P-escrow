@@ -1,0 +1,75 @@
+# docker-compose.yml — Entorno de desarrollo local de EasyMarket
+#
+# Levanta exclusivamente los servicios de infraestructura que el backend
+# necesita para correr con perfil dev. El backend y el frontend NO se
+# containerizán aquí — corren directamente en el host (mvn spring-boot:run
+# y npm run dev respectivamente) para un ciclo de desarrollo más ágil.
+#
+# Uso:
+#   docker compose up -d          → levanta en background
+#   docker compose down           → detiene (los datos persisten en el volumen)
+#   docker compose down -v        → detiene Y borra el volumen (reset completo)
+#
+# Prerequisito: Docker Desktop 4.x o Docker Engine 24+ con Compose V2.
+
+services:
+
+  # ─── PostgreSQL 16 ───────────────────────────────────────────────────────────
+  #
+  # Versión fijada explícitamente: 16-alpine
+  #   • PostgreSQL 16 es la versión LTS estable compatible con:
+  #       - el driver JDBC org.postgresql:postgresql gestionado por el BOM
+  #         de Spring Boot 4.1.0 (PGJDBC 42.7.x, compatible con PG 12–17).
+  #       - flyway-database-postgresql (requiere PostgreSQL 15+ según pom.xml).
+  #       - Testcontainers 1.21.1, que también usa la misma imagen en los
+  #         tests de integración — garantiza que el comportamiento local y el
+  #         de CI sean idénticos.
+  #   • La variante alpine reduce el tamaño de la imagen sin sacrificar
+  #     funcionalidad para desarrollo local.
+  #   • Se evita deliberadamente el tag "latest" para garantizar builds
+  #     reproducibles.
+  #
+  # Credenciales: coinciden byte a byte con los valores por defecto de
+  # application-dev.yml (${DB_*:valor_por_defecto}). Si el desarrollador
+  # provee variables de entorno distintas al levantar el backend, debe
+  # replicarlas también en un archivo .env en esta carpeta (ver .env.example).
+  postgres:
+    image: postgres:16-alpine
+    container_name: easymarket_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       easymarket_dev       # == DB_NAME en application-dev.yml
+      POSTGRES_USER:     easymarket            # == DB_USER en application-dev.yml
+      POSTGRES_PASSWORD: easymarket_dev_pass   # == DB_PASSWORD en application-dev.yml
+    ports:
+      # 5432:5432 → expone el puerto estándar al host.
+      # El backend corre fuera del contenedor (mvn spring-boot:run) y se
+      # conecta vía localhost:5432, coincidiendo con DB_HOST:localhost y
+      # DB_PORT:5432 de application-dev.yml.
+      - "5432:5432"
+    volumes:
+      # Volumen nombrado para persistencia de datos entre reinicios de contenedor.
+      # Sin este volumen, cada "docker compose down" borraría todas las tablas
+      # y requeriría que Flyway re-ejecute todas las migraciones desde cero.
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready verifica que el servidor PostgreSQL está listo para aceptar
+      # conexiones. Útil para orquestar arranque del backend en CI/CD o cuando
+      # se containerice el backend en el futuro.
+      test: ["CMD-SHELL", "pg_isready -U easymarket -d easymarket_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+# ─── Volúmenes nombrados ──────────────────────────────────────────────────────
+#
+# La declaración explícita del volumen aquí (a nivel raíz) permite que Docker
+# lo gestione con nombre estable, independiente del nombre del directorio del
+# proyecto. Esto evita colisiones si el proyecto se clona en rutas distintas.
+volumes:
+  postgres_dev_data:
+    name: easymarket_postgres_dev_data
+    # Sin "external: true" → Docker crea el volumen si no existe.
+    # Con "name" explícito → el volumen siempre se llama igual,
+    # independientemente del nombre del directorio del proyecto.

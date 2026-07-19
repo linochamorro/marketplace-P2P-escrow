@@ -1,0 +1,48 @@
+# application-test.yml — configuración para el perfil "test"
+#
+# Usado exclusivamente por los tests de JUnit. No conecta a ninguna
+# base de datos real.
+#
+# En Spring Boot 4.x los paquetes de autoconfiguración se reorganizaron
+# en módulos independientes. Los nombres de clase correctos para excluir
+# son los del nuevo esquema modular (org.springframework.boot.jdbc.*,
+# org.springframework.boot.orm.*, org.springframework.boot.flyway.*).
+#
+# NOTA: los tests de integración con Testcontainers (PHA01+) NO usan
+# este perfil — ellos arrancan con @ServiceConnection sobre un contenedor
+# PostgreSQL real y re-habilitan JPA/Flyway selectivamente.
+
+spring:
+  # Deshabilitar directamente Flyway vía propiedad — más robusto que
+  # depender del nombre exacto de la clase de autoconfiguración.
+  flyway:
+    enabled: false
+
+  # Deshabilitar la autoconfiguración de DataSource, JPA y Flyway.
+  # Nombres de paquete de Spring Boot 4.x (reorganización modular de 4.0).
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.orm.jpa.autoconfigure.HibernateJpaAutoConfiguration
+      - org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
+
+  # Spring Security en el perfil test: deshabilitar CSRF y usar
+  # usuario por defecto para que el contexto levante sin configuración
+  # real de JWT (que se implementa en PHA01TSK03).
+  security:
+    user:
+      name: test
+      password: test
+
+stripe:
+  secret-key: sk_test_FAKE_FOR_CONTEXT_TEST
+  webhook-secret: whsec_FAKE_FOR_CONTEXT_TEST
+
+app:
+  jwt:
+    secret: test-secret-key-32-chars-minimum-ok
+    expiration-ms: 86400000
+  cors:
+    allowed-origins: http://localhost:3000
+

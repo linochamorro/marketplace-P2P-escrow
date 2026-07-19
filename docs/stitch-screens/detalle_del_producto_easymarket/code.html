@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EasyMarket | Detalles del Producto</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-highest": "#e0e3e5",
+                    "outline": "#76777d",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed-variant": "#3f465c",
+                    "inverse-surface": "#2d3133",
+                    "primary": "#000000",
+                    "secondary": "#006c49",
+                    "surface-dim": "#d8dadc",
+                    "primary-fixed-dim": "#bec6e0",
+                    "on-surface-variant": "#45464d",
+                    "on-error-container": "#93000a",
+                    "on-tertiary-fixed-variant": "#38485d",
+                    "on-secondary-container": "#00714d",
+                    "primary-container": "#131b2e",
+                    "tertiary": "#000000",
+                    "surface-tint": "#565e74",
+                    "on-secondary-fixed-variant": "#005236",
+                    "on-background": "#191c1e",
+                    "secondary-fixed-dim": "#4edea3",
+                    "surface-container": "#eceef0",
+                    "surface-container-lowest": "#ffffff",
+                    "primary-fixed": "#dae2fd",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed": "#0b1c30",
+                    "on-secondary-fixed": "#002113",
+                    "tertiary-fixed-dim": "#b7c8e1",
+                    "outline-variant": "#c6c6cd",
+                    "on-primary-container": "#7c839b",
+                    "inverse-on-surface": "#eff1f3",
+                    "error": "#ba1a1a",
+                    "surface-variant": "#e0e3e5",
+                    "inverse-primary": "#bec6e0",
+                    "surface-container-high": "#e6e8ea",
+                    "on-error": "#ffffff",
+                    "surface-bright": "#f7f9fb",
+                    "secondary-container": "#6cf8bb",
+                    "surface": "#f7f9fb",
+                    "on-primary": "#ffffff",
+                    "on-surface": "#191c1e",
+                    "tertiary-container": "#0b1c30",
+                    "error-container": "#ffdad6",
+                    "tertiary-fixed": "#d3e4fe",
+                    "on-primary-fixed": "#131b2e",
+                    "background": "#f7f9fb",
+                    "secondary-fixed": "#6ffbbe",
+                    "surface-container-low": "#f2f4f6",
+                    "on-tertiary-container": "#75859d"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "margin-mobile": "1rem",
+                    "gutter": "1.5rem",
+                    "stack-gap": "1rem",
+                    "section-gap": "4rem",
+                    "container-max": "1280px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "data-mono": ["JetBrains Mono"],
+                    "headline-xl": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "data-mono": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "headline-xl": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md antialiased">
+<!-- TopNavBar -->
+<nav class="bg-surface-container-lowest dark:bg-surface-container-lowest border-b border-outline-variant dark:border-outline sticky top-0 z-50">
+<div class="flex justify-between items-center px-gutter max-w-container-max mx-auto w-full h-16">
+<div class="flex items-center gap-8">
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed-dim">EasyMarket</span>
+<div class="hidden md:flex gap-6 items-center">
+<a class="text-primary font-bold border-b-2 border-primary pb-1 font-body-md text-body-md" href="#">Mercado</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md" href="#">Cómo funciona</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md" href="#">Sobre nosotros</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded-full">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded-full">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+<div class="h-8 w-8 rounded-full bg-surface-container-highest overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Un retrato limpio y profesional de un usuario orientado a los negocios, tomado en un estudio con iluminación suave. El usuario tiene una expresión amable pero autoritaria. El fondo es de un gris sólido, manteniendo una estética corporativa y de alta gama acorde con una plataforma de servicios financieros." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAQRUNOKY3Q3JNBYuj2eRs_bddwgH8bKHO41BwhdAizKfClwrQPooiNoRD1M79Q7GdIAfS-gwWjnHu17ky_S-NoShKiarzm57fHPbmkv9PpUmYYVoLYBgYzPezAsuiyxtuyybODZX-4d1GZutoxtKFEnkdYBEYgVeHQkgn7Oq8qQJxDRDql9FyTgA0mDW8tr8i5YZ_z5nXd31qyJDRIuviNCZRoUJxmowHn3z39c4VvK8fWYxv6vDgtbMg23EA4NXHsjYwP127-bFUf"/>
+</div>
+<button class="hidden md:block bg-primary text-on-primary px-4 py-2 rounded-lg font-body-sm text-body-sm font-semibold active:opacity-80 transition-opacity">
+                    Publicar artículo
+                </button>
+</div>
+</div>
+</nav>
+<main class="max-w-container-max mx-auto px-gutter py-8">
+<!-- Product Header & Image Gallery -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter mb-section-gap">
+<!-- Left Side: Images -->
+<div class="lg:col-span-7 space-y-4">
+<div class="aspect-video bg-white border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+<img class="w-full h-full object-cover" data-alt="Una fotografía de estudio profesional de alta resolución de un reloj mecánico de edición limitada. La iluminación es dramática y precisa, destacando los intrincados engranajes y el acabado de titanio cepillado. El reloj se coloca sobre una superficie de pizarra oscura, creando una sensación sofisticada y lujosa. El ambiente general es autoritario y representa un activo de alto valor adecuado para un mercado de depósito en garantía." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDO5kEn5iEQehL_WsFdk4ryZeE2VghnhNJBlPYx77X5SPL1JHJkA1Ek9i7nojvpDj42LNkPsX7hWKixEGVb1w-YWMjJ11JxtZkTIsjFsadA1dr2ggw45isaZhwoLKGWuGTWH0wVHDrDpJ4XjhJS4SP0HeicdmfKmdsujH4Kfx7aj7j_QKrf3OcIhzENcbgkZiQ6fide7gkbPPP-pLufjMV5cG5Dp8l2hJUOaAoUjYhpxFuVP3MfC7lN9tP8XiwaXQYPu-NczU6pOWQI"/>
+</div>
+<div class="grid grid-cols-4 gap-4">
+<div class="aspect-square bg-white border border-outline-variant rounded-lg overflow-hidden cursor-pointer hover:border-primary transition-colors">
+<img class="w-full h-full object-cover" data-alt="Primer plano macro de un movimiento de reloj de lujo de alta gama, que muestra componentes de acero pulido y latón. La imagen es nítida y clara, enfatizando la precisión técnica y la calidad. La estética es moderna y de nivel bancario, con tonos neutros e iluminación enfocada en los detalles mecánicos." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA7jrmBy_QD7uF0Fye3IQXlH_1Y73_N41dK_WcSrPpf9kTruUwHu2dI6D0FF6MB9P0t_rgcouTEavVceRdU1BGM2hGFrJ99nT76pRE-aAPbLAlHtaXRSwrk1SKlNM03PWBkvDTUGqJCiTOMna4d87IQjKYWrhY1Z4tNXGJudrMqghWO2i7XlO2M5AnTVHI8fR6peXVCom6jWUawICbXhrOoTMhakjFXOSlCo1GoaYd7UynLX9yZfKy89CZ5fqQltzuA4vV9-4JOg5K6"/>
+</div>
+<div class="aspect-square bg-white border border-outline-variant rounded-lg overflow-hidden cursor-pointer hover:border-primary transition-colors">
+<img class="w-full h-full object-cover" data-alt="Toma de perfil lateral de un reloj de titanio de lujo, demostrando el diseño delgado y la textura del cristal de zafiro. La iluminación es suave y profesional, destacando la naturaleza de alto riesgo del activo. El fondo es un ambiente de estudio limpio y minimalista." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUa-w53jvbv3kadeCGkYYCIU3Ax4aRhF92avez3Z7AGfRInosIIswr76S898gebtKf9w7rQ9hGcEBvtYm_fV-k9fDevvdl_-6n4hdYtwD7rZ2RbmijolCKoBMkWwIIrywrqjnNhsrdGPDVq06MYMDnbBWQr4-hs3JCxZfjjBJC1yBrvTeu4MXad5wcZTpJ4PI7d1nFi7loJ1IJbVFgQ21tyU0hmDMBQTPrfbIcAf9U8ph021r0dYwgl4d1Npz2tfpK25q6AXwEA9Mh"/>
+</div>
+<div class="aspect-square bg-white border border-outline-variant rounded-lg overflow-hidden cursor-pointer hover:border-primary transition-colors">
+<img class="w-full h-full object-cover" data-alt="El reloj de lujo mostrado dentro de su caja de presentación de madera premium original con forro de cuero. La escena sugiere autenticidad y documentación completa, filmada con una iluminación de clave alta que evoca confianza y seguridad en un contexto de mercado entre pares." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAM2uaTVNz0a1HUGY4MG10QEaEp8Xqn9tAikc043l0iHMZaLRgRxroiN-MMiWAtAXQJfGdEkv_a6yV282JgsqVRVMEVFwK2Ly6i3O3iQS3hUkaWjhRF9vihnUREr4JO2gl3xv7hnXRHsLiIDwxkqAM3LF9YHSPGiabo9unl5Kb0Be_ys99WXdo0HU6EVwXSaUNEUozkhRyEInZ-vbc3Utxkl2RnZu5aLkJ6XOWqJ_YZvjU41t259rHWRPWZGIsTq1Gk1A4Nh2LqXiEE"/>
+</div>
+<div class="aspect-square bg-white border border-outline-variant rounded-lg overflow-hidden relative group cursor-pointer">
+<img class="w-full h-full object-cover" data-alt="Una toma de estilo de vida de un reloj de alta gama en la muñeca de un profesional, enfatizando la escala y la portabilidad. La iluminación es brillante y moderna, creando una sensación corporativa de lujo. El fondo es un entorno de oficina de alta gama borroso con suaves tonos pizarra y blanco." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDk1L3oaapy1W1QGXye41DlTDq6-gyCEwtGPEaNxNf8Uny9UzeTxDMOYiM4LP4HqSR7c0r8OKb8M9foBrdkmTs0KjAlxz6aMIsN-wflpRsSKeLtaj-5KCnLhFHAaoEbTA22H5N4M-RHUWy9LdmC8t-LGXmKXZIHddc1rpVmFPVVwKicv9i2eNANeZpWgDvFNI6_KDI5nYXjzcCRTFj-MuVr0X12o78naqr9JoDGtc9BTEAY9T_KfyxlQ00-tQbx6-U6zwgOpC8xRVX9"/>
+<div class="absolute inset-0 bg-primary/40 flex items-center justify-center text-white font-bold">+12</div>
+</div>
+</div>
+</div>
+<!-- Right Side: Details & CTA -->
+<div class="lg:col-span-5 flex flex-col gap-6">
+<div class="space-y-2">
+<div class="flex items-center gap-2">
+<span class="bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider">Activo verificado</span>
+<span class="bg-surface-container-highest text-on-surface-variant px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider">Artículo #99283</span>
+</div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface">Obra Maestra de la Relojería: Limited Edition Titan-9</h1>
+<p class="text-on-surface-variant font-body-lg text-body-lg">Estado: Impecable (A+). Incluye documentación y embalaje original. Inspeccionado por expertos independientes.</p>
+</div>
+<div class="bg-white border border-outline-variant rounded-xl p-6 shadow-sm space-y-6">
+<div class="flex justify-between items-end">
+<div>
+<p class="text-on-surface-variant font-label-caps text-label-caps">Precio Fijo</p>
+<p class="font-headline-lg text-headline-lg text-primary">S/. 12,450.00</p>
+</div>
+<div class="text-right">
+<p class="text-on-surface-variant font-label-caps text-label-caps">Comisión de depósito</p>
+<p class="font-body-md text-body-md font-semibold">~S/. 124.50</p>
+</div>
+</div>
+<div class="space-y-3">
+<button class="w-full bg-primary text-on-primary py-4 rounded-lg font-body-md text-body-md font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity active:scale-[0.98]">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">security</span>
+                            Comprar con Garantía
+                        </button>
+<button class="w-full bg-surface-container-low text-primary border border-outline-variant py-3 rounded-lg font-body-sm text-body-sm font-semibold hover:bg-surface-container-high transition-colors">
+                            Hacer una Oferta
+                        </button>
+</div>
+<div class="pt-4 border-t border-outline-variant flex gap-4">
+<div class="flex-1 flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-secondary">verified_user</span>
+<span class="text-body-sm font-body-sm">Protección contra Fraude</span>
+</div>
+<div class="flex-1 flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-secondary">local_shipping</span>
+<span class="text-body-sm font-body-sm">Envío Asegurado</span>
+</div>
+</div>
+</div>
+<!-- Seller Profile Card -->
+<div class="bg-surface-container-low border border-outline-variant rounded-xl p-4">
+<p class="text-on-surface-variant font-label-caps text-label-caps mb-3">Verificación del Vendedor</p>
+<div class="flex items-center gap-4">
+<div class="h-12 w-12 rounded-lg bg-surface-container-highest overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Un retrato de un vendedor masculino profesional con una camisa blanca impecable y un blazer azul marino. El fondo es una oficina corporativa limpia y bien iluminada. El vendedor tiene una expresión confiada y confiable. La imagen se presenta como un perfil de verificación, sugiriendo un alto cumplimiento de KYC y confiabilidad en un entorno de mercado financiero." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDisFPdfltM0_kecJCbtssMB9_TY8oKPt-BFExAcxZlU8E4qgIiSIuXL8_Hg60aguLxT_pkxedPxzVmPdyvzsy3qj1hBIClguZ9vMinBbAUXHHO_e_wWwvSkPtBoRxaWDHw2lcrjgleI8JQ6ALMejPZ7YIjN6dy6JMSViUKNoGmQKi6dbjM3K6kOdh_hSAFw2K7Mmovnpb8y0ffLOe79mFplZzsVSr_L59pywpRIkg8tcaa9987p87hFwfTLNziMfvlE3nx9-cNGUQ5"/>
+</div>
+<div class="flex-1">
+<div class="flex items-center gap-1">
+<span class="font-body-md text-body-md font-bold">Marcus V.</span>
+<span class="material-symbols-outlined text-secondary text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Identidad Verificada (KYC Nivel 3)</p>
+</div>
+<div class="text-right">
+<p class="font-body-md text-body-md font-bold">4.9/5.0</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant">42 Operaciones</p>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-outline-variant grid grid-cols-2 gap-4">
+<div class="bg-white p-2 rounded-lg border border-outline-variant/50">
+<p class="text-[10px] uppercase font-bold text-outline">Miembro desde</p>
+<p class="text-sm font-semibold">Ene 2022</p>
+</div>
+<div class="bg-white p-2 rounded-lg border border-outline-variant/50">
+<p class="text-[10px] uppercase font-bold text-outline">Tasa de Éxito</p>
+<p class="text-sm font-semibold">100%</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bento Grid Specs & Info -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-section-gap">
+<div class="md:col-span-2 bg-white border border-outline-variant rounded-xl p-8 space-y-6">
+<h2 class="font-headline-md text-headline-md">Especificaciones Técnicas</h2>
+<div class="grid grid-cols-2 gap-y-6 gap-x-8">
+<div class="space-y-1">
+<p class="text-on-surface-variant font-label-caps text-label-caps">Diámetro de Caja</p>
+<p class="font-body-md text-body-md font-bold">41mm</p>
+</div>
+<div class="space-y-1">
+<p class="text-on-surface-variant font-label-caps text-label-caps">Movimiento</p>
+<p class="font-body-md text-body-md font-bold">Calibre MT5602 (Automático)</p>
+</div>
+<div class="space-y-1">
+<p class="text-on-surface-variant font-label-caps text-label-caps">Material</p>
+<p class="font-body-md text-body-md font-bold">Titanio Grado 5 / Cerámica</p>
+</div>
+<div class="space-y-1">
+<p class="text-on-surface-variant font-label-caps text-label-caps">Resistencia al Agua</p>
+<p class="font-body-md text-body-md font-bold">200m (660 pies)</p>
+</div>
+<div class="space-y-1">
+<p class="text-on-surface-variant font-label-caps text-label-caps">Reserva de Marcha</p>
+<p class="font-body-md text-body-md font-bold">70 Horas</p>
+</div>
+<div class="space-y-1">
+<p class="text-on-surface-variant font-label-caps text-label-caps">Garantía</p>
+<p class="font-body-md text-body-md font-bold">Hasta Dic 2026</p>
+</div>
+</div>
+<div class="pt-6 border-t border-outline-variant">
+<p class="text-on-surface font-body-md text-body-md leading-relaxed">
+                        El Titan-9 representa la cumbre de la ingeniería horológica moderna. Esta unidad específica fue adquirida directamente de un distribuidor autorizado y se ha mantenido en un entorno con humedad controlada. La subasta incluye las cajas interior y exterior originales, la tarjeta de garantía y todos los eslabones extra del brazalete.
+                    </p>
+</div>
+</div>
+<!-- Escrow Process Column -->
+<div class="bg-primary text-on-primary rounded-xl p-8 flex flex-col justify-between">
+<div>
+<h3 class="font-headline-md text-headline-md mb-6">Cómo Funciona el Depósito en Garantía</h3>
+<div class="space-y-8 relative">
+<!-- Stepper Line -->
+<div class="absolute left-3 top-2 bottom-2 w-0.5 bg-on-primary/20"></div>
+<div class="flex gap-4 relative z-10">
+<div class="w-6 h-6 rounded-full bg-secondary text-white flex items-center justify-center text-xs font-bold">1</div>
+<div class="flex-1">
+<p class="font-bold text-sm">Pago Seguro</p>
+<p class="text-on-primary/70 text-xs mt-1">Los fondos se retienen en una bóveda segura de terceros, no se envían directamente al vendedor.</p>
+</div>
+</div>
+<div class="flex gap-4 relative z-10">
+<div class="w-6 h-6 rounded-full bg-on-primary/20 text-on-primary flex items-center justify-center text-xs font-bold border border-on-primary/40">2</div>
+<div class="flex-1">
+<p class="font-bold text-sm">Periodo de Verificación</p>
+<p class="text-on-primary/70 text-xs mt-1">Tiene 48 horas para inspeccionar el artículo al recibirlo para asegurar que coincida con la descripción.</p>
+</div>
+</div>
+<div class="flex gap-4 relative z-10">
+<div class="w-6 h-6 rounded-full bg-on-primary/20 text-on-primary flex items-center justify-center text-xs font-bold border border-on-primary/40">3</div>
+<div class="flex-1">
+<p class="font-bold text-sm">Liberación de Fondos</p>
+<p class="text-on-primary/70 text-xs mt-1">Una vez que confirme su satisfacción, el pago se libera al vendedor instantáneamente.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-12 bg-white/10 p-4 rounded-lg border border-white/10">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-secondary-fixed">policy</span>
+<span class="text-sm font-bold">Política de Reembolso del 100%</span>
+</div>
+<p class="text-xs text-on-primary/70">Si el artículo no es como se describe, el centro de disputas de EasyMarket garantiza el reembolso total de su capital.</p>
+</div>
+</div>
+</div>
+<!-- Transaction History Section -->
+<section class="space-y-6">
+<div class="flex justify-between items-center">
+<h2 class="font-headline-md text-headline-md">Historial de Transacciones del Vendedor</h2>
+<button class="text-primary font-semibold text-body-sm hover:underline">Ver todos los registros</button>
+</div>
+<div class="overflow-x-auto border border-outline-variant rounded-xl bg-white">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low text-on-surface-variant font-label-caps text-label-caps border-b border-outline-variant">
+<th class="px-6 py-4">ID de Transacción</th>
+<th class="px-6 py-4">Categoría</th>
+<th class="px-6 py-4">Fecha</th>
+<th class="px-6 py-4">Monto</th>
+<th class="px-6 py-4">Estado</th>
+</tr>
+</thead>
+<tbody class="text-body-sm font-body-sm">
+<tr class="border-b border-outline-variant/50 hover:bg-surface-bright transition-colors">
+<td class="px-6 py-4 font-data-mono">TX-882193</td>
+<td class="px-6 py-4">Reloj de Lujo</td>
+<td class="px-6 py-4">12 Nov, 2023</td>
+<td class="px-6 py-4 font-bold text-primary">S/. 8,200.00</td>
+<td class="px-6 py-4">
+<span class="bg-secondary-container text-on-secondary-container px-2 py-1 rounded text-[10px] font-bold uppercase">Completado</span>
+</td>
+</tr>
+<tr class="border-b border-outline-variant/50 hover:bg-surface-bright transition-colors">
+<td class="px-6 py-4 font-data-mono">TX-774012</td>
+<td class="px-6 py-4">Bolso</td>
+<td class="px-6 py-4">05 Sep, 2023</td>
+<td class="px-6 py-4 font-bold text-primary">S/. 3,450.00</td>
+<td class="px-6 py-4">
+<span class="bg-secondary-container text-on-secondary-container px-2 py-1 rounded text-[10px] font-bold uppercase">Completado</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="px-6 py-4 font-data-mono">TX-651009</td>
+<td class="px-6 py-4">Coleccionables</td>
+<td class="px-6 py-4">22 Ago, 2023</td>
+<td class="px-6 py-4 font-bold text-primary">S/. 1,200.00</td>
+<td class="px-6 py-4">
+<span class="bg-secondary-container text-on-secondary-container px-2 py-1 rounded text-[10px] font-bold uppercase">Completado</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest dark:bg-surface-container-lowest border-t border-outline-variant dark:border-outline py-8">
+<div class="flex flex-col md:flex-row justify-between items-center px-gutter max-w-container-max mx-auto gap-4">
+<div class="text-left">
+<span class="font-label-caps text-label-caps font-bold text-primary uppercase">EasyMarket P2P</span>
+<p class="text-on-surface-variant font-body-sm text-body-sm mt-1">© 2024 EasyMarket P2P. Todos los derechos reservados. Seguro y Encriptado.</p>
+</div>
+<div class="flex flex-wrap justify-center gap-6">
+<a class="text-on-surface-variant font-body-sm text-body-sm hover:text-primary transition-colors underline" href="#">Términos de Servicio</a>
+<a class="text-on-surface-variant font-body-sm text-body-sm hover:text-primary transition-colors underline" href="#">Política de Privacidad</a>
+<a class="text-on-surface-variant font-body-sm text-body-sm hover:text-primary transition-colors underline" href="#">Contrato de Depósito</a>
+<a class="text-on-surface-variant font-body-sm text-body-sm hover:text-primary transition-colors underline" href="#">Protección contra Fraude</a>
+</div>
+</div>
+</footer>
+<script>
+        // Micro-interaction for gallery image swapping
+        const thumbnails = document.querySelectorAll('.grid-cols-4 > div img');
+        const mainImage = document.querySelector('.lg:col-span-7 .aspect-video img');
+
+        thumbnails.forEach(thumb => {
+            thumb.parentElement.addEventListener('click', () => {
+                const tempSrc = mainImage.src;
+                const tempAlt = mainImage.getAttribute('data-alt');
+                
+                mainImage.src = thumb.src;
+                mainImage.setAttribute('data-alt', thumb.getAttribute('data-alt'));
+                
+                // Opacity transition effect
+                mainImage.style.opacity = '0';
+                setTimeout(() => {
+                    mainImage.style.opacity = '1';
+                    mainImage.style.transition = 'opacity 0.3s ease-in-out';
+                }, 50);
+            });
+        });
+    </script>
+</body></html>

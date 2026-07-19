@@ -1,0 +1,71 @@
+# application.yml — configuración base (compartida por todos los perfiles)
+#
+# Este archivo NO contiene credenciales ni secretos. Toda propiedad sensible
+# (contraseña de BD, claves Stripe, clave JWT) se inyecta desde variables
+# de entorno mediante la sintaxis ${VARIABLE:valor-por-defecto}.
+# Ver plan.md, sección «Manejo de secretos».
+#
+# El perfil activo se selecciona con SPRING_PROFILES_ACTIVE (dev en local,
+# prod en Railway). Las propiedades de cada perfil están en
+# application-dev.yml y application-prod.yml.
+
+spring:
+  application:
+    name: marketplace
+
+  # ─── JPA / Hibernate ────────────────────────────────────────────────────────
+  jpa:
+    # NUNCA "update" ni "create". Flyway es el único responsable del esquema.
+    # Hibernate solo valida que el esquema coincide con las entidades — si no
+    # coincide, la aplicación falla al arrancar (fail-fast intencional).
+    hibernate:
+      ddl-auto: validate
+    # Mostrar SQL en consola solo en perfil dev (override en application-dev.yml)
+    show-sql: false
+    properties:
+      hibernate:
+        # Zona horaria explícita para todos los timestamps — Perú UTC-5.
+        # Garantiza que los cálculos de 24h/48h sean consistentes sin
+        # importar en qué zona horaria corra el servidor Railway.
+        jdbc:
+          time_zone: America/Lima
+        format_sql: true
+
+  # ─── Flyway ─────────────────────────────────────────────────────────────────
+  flyway:
+    # Ubicación estándar de migraciones (V1__init.sql, V2__..., etc.)
+    locations: classpath:db/migration
+    # Flyway falla al arrancar si detecta migraciones aplicadas que ya no
+    # existen en el classpath — protección contra borrado accidental de scripts.
+    validate-on-migrate: true
+
+  # ─── Jackson ────────────────────────────────────────────────────────────────
+  # NOTA: las propiedades spring.jackson.serialization.* no son compatibles con
+  # Jackson 3.x (tools.jackson.databind), que es el que incluye Spring Boot 4.x.
+  # En Jackson 3 el binding relajado con guiones sobre SerializationFeature ya
+  # no funciona. La configuración de Jackson se hará programáticamente en una
+  # clase @Configuration cuando se implemente la capa REST (PHA02+).
+  # Jackson 3 ya serializa fechas como ISO-8601 por defecto — no se necesita
+  # configuración explícita para write-dates-as-timestamps=false.
+
+# ─── Actuator (health check) ──────────────────────────────────────────────────
+# GET /actuator/health → 200 UP. Necesario para el test de integración de
+# PHA00TSK07 (Railway verifica este endpoint para determinar si el pod está listo).
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+# ─── springdoc-openapi ────────────────────────────────────────────────────────
+# Swagger UI disponible en /swagger-ui.html (solo en perfil dev).
+# En prod se deshabilita mediante override en application-prod.yml.
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true

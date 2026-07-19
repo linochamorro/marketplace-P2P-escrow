@@ -1,0 +1,12 @@
+# Directorio de migraciones Flyway
+#
+# Los scripts SQL de migración se crean aquí a partir de PHA01TSK01.
+# Convención de nombres: V{número}__{descripción}.sql
+# Ejemplos:
+#   V1__init_usuarios_login_attempts.sql   (PHA01TSK01)
+#   V2__seed_admin.sql                     (PHA01TSK09)
+#   V3__init_categorias_publicaciones.sql  (PHA02TSK01 + PHA02TSK02)
+#
+# Este archivo .gitkeep existe únicamente para que Git rastree el
+# directorio vacío. Debe eliminarse cuando se agregue la primera
+# migración real (PHA01TSK01).

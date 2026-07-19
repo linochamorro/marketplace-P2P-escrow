@@ -1,0 +1,359 @@
+<!DOCTYPE html><html class="light" lang="es"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=block" rel="stylesheet"><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">try{
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-highest": "#e0e3e5",
+                    "outline": "#76777d",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed-variant": "#3f465c",
+                    "inverse-surface": "#2d3133",
+                    "primary": "#000000",
+                    "secondary": "#006c49",
+                    "surface-dim": "#d8dadc",
+                    "primary-fixed-dim": "#bec6e0",
+                    "on-surface-variant": "#45464d",
+                    "on-error-container": "#93000a",
+                    "on-tertiary-fixed-variant": "#38485d",
+                    "on-secondary-container": "#00714d",
+                    "primary-container": "#131b2e",
+                    "tertiary": "#000000",
+                    "surface-tint": "#565e74",
+                    "on-secondary-fixed-variant": "#005236",
+                    "on-background": "#191c1e",
+                    "secondary-fixed-dim": "#4edea3",
+                    "surface-container": "#eceef0",
+                    "surface-container-lowest": "#ffffff",
+                    "primary-fixed": "#dae2fd",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed": "#0b1c30",
+                    "on-secondary-fixed": "#002113",
+                    "tertiary-fixed-dim": "#b7c8e1",
+                    "outline-variant": "#c6c6cd",
+                    "on-primary-container": "#7c839b",
+                    "inverse-on-surface": "#eff1f3",
+                    "error": "#ba1a1a",
+                    "surface-variant": "#e0e3e5",
+                    "inverse-primary": "#bec6e0",
+                    "surface-container-high": "#e6e8ea",
+                    "on-error": "#ffffff",
+                    "surface-bright": "#f7f9fb",
+                    "secondary-container": "#6cf8bb",
+                    "surface": "#f7f9fb",
+                    "on-primary": "#ffffff",
+                    "on-surface": "#191c1e",
+                    "tertiary-container": "#0b1c30",
+                    "error-container": "#ffdad6",
+                    "tertiary-fixed": "#d3e4fe",
+                    "on-primary-fixed": "#131b2e",
+                    "background": "#f7f9fb",
+                    "secondary-fixed": "#6ffbbe",
+                    "surface-container-low": "#f2f4f6",
+                    "on-tertiary-container": "#75859d"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "margin-mobile": "1rem",
+                    "gutter": "1.5rem",
+                    "stack-gap": "1rem",
+                    "section-gap": "4rem",
+                    "container-max": "1280px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "data-mono": ["JetBrains Mono"],
+                    "headline-xl": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "data-mono": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "headline-xl": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    }catch(_e){}</script></head><body class="bg-background text-on-surface font-body-md selection:bg-primary selection:text-white">
+<!-- SideNavBar Anchor -->
+<aside class="h-full w-64 fixed left-0 top-0 bg-surface-container-low border-r border-outline-variant flex flex-col p-4 space-y-2 z-50">
+    <div class="mb-8 px-2">
+        <h1 class="font-headline-sm text-headline-sm font-bold text-primary">EasyMarket</h1>
+        <p class="font-body-sm text-body-sm text-on-surface-variant opacity-70">Gestión</p>
+    </div>
+    <nav class="flex-1 space-y-1">
+        <a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+            <span class="material-symbols-outlined" data-icon="dashboard" data-original-icon="dashboard">dashboard</span>
+            <span class="font-body-sm text-body-sm">Panel de Control</span>
+        </a>
+        <a class="bg-primary text-on-primary rounded-lg flex items-center gap-3 px-4 py-2 transition-transform active:scale-95" href="#">
+            <span class="material-symbols-outlined" data-icon="account_balance_wallet">account_balance_wallet</span>
+            <span class="font-body-sm text-body-sm">Transacciones Activas</span>
+        </a>
+        <a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+            <span class="material-symbols-outlined" data-icon="gavel">gavel</span>
+            <span class="font-body-sm text-body-sm">Centro de Disputas</span>
+        </a>
+        <a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+            <span class="material-symbols-outlined" data-icon="payments">payments</span>
+            <span class="font-body-sm text-body-sm">Billetera</span>
+        </a>
+        <a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+            <span class="material-symbols-outlined" data-icon="settings">settings</span>
+            <span class="font-body-sm text-body-sm">Ajustes</span>
+        </a>
+    </nav>
+    <div class="pt-4 border-t border-outline-variant space-y-1">
+        <a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+            <span class="material-symbols-outlined" data-icon="security">security</span>
+            <span class="font-body-sm text-body-sm">Registro de Seguridad</span>
+        </a>
+        <a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+            <span class="material-symbols-outlined" data-icon="contact_support">contact_support</span>
+            <span class="font-body-sm text-body-sm">Soporte</span>
+        </a>
+        <div class="mt-4 p-4 bg-surface-container-highest rounded-lg flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold">JD</div>
+            <div class="overflow-hidden">
+                <p class="font-body-sm text-body-sm font-semibold truncate">Admin Verificado</p>
+                <p class="text-[10px] text-on-surface-variant uppercase tracking-wider">Escrow Nivel 3</p>
+            </div>
+        </div>
+    </div>
+</aside>
+
+<!-- Main Content Canvas -->
+<main class="ml-64 min-h-screen px-gutter py-8 max-w-[1200px]">
+    <!-- Header Actions -->
+    <header class="flex justify-between items-end mb-8">
+        <div>
+            <nav class="flex items-center gap-2 text-on-surface-variant font-label-caps text-label-caps mb-2">
+                <span class="hover:text-primary cursor-pointer">Transacciones</span>
+                <span class="material-symbols-outlined text-sm">chevron_right</span>
+                <span class="text-primary font-bold">Pedido #TX-992104</span>
+            </nav>
+            <h2 class="font-headline-lg text-headline-lg text-primary">Impresora 3D Precision Masterwork</h2>
+        </div>
+        <div class="flex gap-stack-gap">
+            <button class="px-4 py-2 border border-outline-variant rounded hover:bg-surface-container-low transition-colors font-body-sm text-body-sm flex items-center gap-2">
+                <span class="material-symbols-outlined text-base">print</span> Imprimir Recibo
+            </button>
+            <button class="px-4 py-2 border border-error text-error rounded hover:bg-error/5 transition-colors font-body-sm text-body-sm flex items-center gap-2">
+                <span class="material-symbols-outlined text-base">cancel</span> Cancelar Pedido
+            </button>
+        </div>
+    </header>
+
+    <!-- Status Stepper Component -->
+    <section class="bg-surface-container-lowest border border-outline-variant rounded-lg p-8 mb-gutter relative overflow-hidden shadow-sm">
+        <div class="relative flex justify-between items-start z-10">
+            <!-- Line -->
+            <div class="absolute top-[14px] left-8 right-8 h-0.5 bg-outline-variant z-0"></div>
+            <div class="absolute top-[14px] left-8 w-1/4 h-0.5 bg-secondary z-0"></div>
+            <!-- Step 1 -->
+            <div class="flex flex-col items-center gap-2 w-32 relative text-center">
+                <div class="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center ring-4 ring-surface-container-lowest">
+                    <span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                </div>
+                <span class="font-body-sm text-body-sm font-semibold text-secondary">Pedido Realizado</span>
+                <span class="text-[10px] text-on-surface-variant">24 Oct, 10:20 AM</span>
+            </div>
+            <!-- Step 2 (Active)-->
+            <div class="flex flex-col items-center gap-2 w-40 relative text-center">
+                <div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center ring-4 ring-surface-container-lowest animate-pulse">
+                    <span class="material-symbols-outlined text-lg">account_balance</span>
+                </div>
+                <span class="font-body-sm text-body-sm font-bold text-primary">Fondos en Escrow</span>
+                <span class="text-[10px] text-primary font-mono bg-primary-fixed px-1.5 rounded">VERIFICADO SEGURO</span>
+            </div>
+            <!-- Step 3 -->
+            <div class="flex flex-col items-center gap-2 w-32 relative text-center opacity-40">
+                <div class="w-8 h-8 rounded-full bg-outline-variant text-on-surface-variant flex items-center justify-center ring-4 ring-surface-container-lowest">
+                    <span class="material-symbols-outlined text-lg">local_shipping</span>
+                </div>
+                <span class="font-body-sm text-body-sm font-medium">Enviado</span>
+                <span class="text-[10px] text-on-surface-variant">Pendiente del Vendedor</span>
+            </div>
+            <!-- Step 4 -->
+            <div class="flex flex-col items-center gap-2 w-32 relative text-center opacity-40">
+                <div class="w-8 h-8 rounded-full bg-outline-variant text-on-surface-variant flex items-center justify-center ring-4 ring-surface-container-lowest">
+                    <span class="material-symbols-outlined text-lg">fact_check</span>
+                </div>
+                <span class="font-body-sm text-body-sm font-medium">Inspección</span>
+                <span class="text-[10px] text-on-surface-variant">Ventana de 48h</span>
+            </div>
+            <!-- Step 5 -->
+            <div class="flex flex-col items-center gap-2 w-32 relative text-center opacity-40">
+                <div class="w-8 h-8 rounded-full bg-outline-variant text-on-surface-variant flex items-center justify-center ring-4 ring-surface-container-lowest">
+                    <span class="material-symbols-outlined text-lg">verified</span>
+                </div>
+                <span class="font-body-sm text-body-sm font-medium">Completado</span>
+                <span class="text-[10px] text-on-surface-variant">Fondos Liberados</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Bento Grid Layout for Details & Communication -->
+    <div class="grid grid-cols-12 gap-gutter">
+        <!-- Left Column: Order Summary -->
+        <div class="col-span-12 lg:col-span-4 space-y-gutter">
+            <!-- Transaction Summary Card -->
+            <article class="bg-surface-container-lowest border border-outline-variant rounded-lg p-6 shadow-sm">
+                <h3 class="font-label-caps text-label-caps text-on-surface-variant mb-6 uppercase tracking-widest border-b border-outline-variant pb-2">Resumen del Pedido</h3>
+                <div class="space-y-4">
+                    <div class="flex items-start gap-4">
+                        <div class="w-20 h-20 bg-surface-container rounded border border-outline-variant flex-shrink-0 bg-cover bg-center" data-alt="A high-end industrial 3D printer with sleek metallic body and carbon fiber accents, positioned in a clean engineering studio. Professional studio lighting highlights the intricate internal components and high-quality build. The image conveys financial security and professional-grade industrial equipment with a minimalist blue and grey color palette." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAvOeQ9VQtmBVuDtWOBBV6aIPV70ihsgCLpgjp9IvecfV717QeEsuU_Oi4XouDWgPCZ3h-t1ox6Lp9sNm9eOj2OOcIZSX82_hAMmLWT2hwPqsbFfL1kGGMG3zQo6AmgKWY7aYJJFvCsJwNMazb9iiW7zTXvOdzpZ_2LUWemsshSr3LEX5i9ccMbbiQyKzKXY29xu8ZCXXHL4mVVNYotuiF_Bov6CG86FiaXcIDc0MRkB_IKrJZedeeTBsUVNWX8I34chvZGNtJuUH2z')"></div>
+                        <div>
+                            <p class="font-body-sm text-body-sm font-bold">Industrial Forge-7X</p>
+                            <p class="font-data-mono text-data-mono text-xs text-on-surface-variant">SKU: PRO-3D-990</p>
+                            <p class="mt-2 text-primary font-bold font-data-mono">S/.2.450,00</p>
+                        </div>
+                    </div>
+                    <div class="pt-4 space-y-2 border-t border-outline-variant">
+                        <div class="flex justify-between text-body-sm font-body-sm">
+                            <span class="text-on-surface-variant">Tarifa de Escrow (0.5%)</span>
+                            <span class="">S/.12,25</span>
+                        </div>
+                        <div class="flex justify-between text-body-sm font-body-sm">
+                            <span class="text-on-surface-variant">Prima de Seguro</span>
+                            <span class="">S/.45,00</span>
+                        </div>
+                        <div class="flex justify-between font-bold text-lg pt-2 border-t border-dashed border-outline-variant">
+                            <span class="">Total Retenido</span>
+                            <span class="font-data-mono">S/.2.507,25</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 flex flex-col gap-2">
+                    <div class="p-3 bg-secondary/10 border border-secondary/20 rounded flex items-center gap-3">
+                        <span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">security</span>
+                        <span class="font-body-sm text-body-sm text-secondary font-medium">Protegido por Escrow Shield</span>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Seller Info -->
+            <article class="bg-surface-container-lowest border border-outline-variant rounded-lg p-6 shadow-sm">
+                <h3 class="font-label-caps text-label-caps text-on-surface-variant mb-4 uppercase tracking-widest">Detalles de la Contraparte</h3>
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="w-12 h-12 rounded-full bg-surface-container overflow-hidden ring-2 ring-outline-variant">
+                        <img class="w-full h-full object-cover" data-alt="A professional business portrait of a middle-aged male electronics engineer wearing a crisp white dress shirt. The background is a soft-focus laboratory setting. Professional lighting creates a trustworthy and authoritative corporate vibe in line with banking-grade security aesthetics." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAtAv6kuiF1uuteEXEphIm9VbDksf0OOe6rGQgfrRVw6BY_cBSW2sbJ-Bl6yyFcUmdKXk9-zeQDBTQV5kS1kZDLpiRPk1atUJUGKTty3rCr9fzsyeN3xLHLp1n1zjSMMyBJQQZ-a9zfPuH7AAu6aa8l-oU8uIkAI3lB0TzBo9wBogBmGqB6NMconhmb_9P3EsL5Dh9yfmgpG2WFtpNudWYrV5iUDPftWjK-AbXqKYPHwJ5aRbp0iUdA6SRScHAnUOr4006TLX-9g3jU">
+                    </div>
+                    <div>
+                        <p class="font-body-sm text-body-sm font-bold">Vector Logistics GmbH</p>
+                        <div class="flex items-center gap-1 text-secondary">
+                            <span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">verified</span>
+                            <span class="text-[10px] font-bold">Vendedor Destacado</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 pt-4 border-t border-outline-variant">
+                    <div>
+                        <p class="text-[10px] text-on-surface-variant uppercase font-bold">Calificación</p>
+                        <p class="font-body-sm text-body-sm">4.9/5.0</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-on-surface-variant uppercase font-bold">Historial</p>
+                        <p class="font-body-sm text-body-sm">421 Tratos</p>
+                    </div>
+                </div>
+            </article>
+        </div>
+
+        <!-- Right Column: Chat & Main Actions -->
+        <div class="col-span-12 lg:col-span-8 flex flex-col gap-gutter">
+            <!-- Main Control Panel -->
+            <div class="bg-primary text-on-primary p-6 rounded-lg shadow-lg flex justify-between items-center">
+                <div>
+                    <h4 class="font-headline-md text-headline-md mb-1">Fondos Asegurados</h4>
+                    <p class="font-body-sm text-body-sm opacity-80 max-w-md">Su pago de S/.2.507,25 se encuentra en una bóveda multisig. El vendedor ha sido notificado para enviar el artículo.</p>
+                </div>
+                <div class="flex flex-col gap-2">
+                    <button class="px-6 py-3 bg-secondary hover:bg-secondary/90 text-on-secondary rounded font-bold transition-all shadow-md active:scale-95 disabled:opacity-50" disabled="">
+                        Confirmar Recepción
+                    </button>
+                    <p class="text-[10px] text-center opacity-60">Se desbloquea tras el envío</p>
+                </div>
+            </div>
+
+            <!-- Chat Interface -->
+            <article class="bg-surface-container-lowest border border-outline-variant rounded-lg flex flex-col flex-1 shadow-sm overflow-hidden">
+                <div class="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-low">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-2 rounded-full bg-secondary animate-pulse"></div>
+                        <h3 class="font-body-sm text-body-sm font-bold">Canal de Comunicación Seguro</h3>
+                    </div>
+                    <div class="flex gap-4">
+                        <button class="text-on-surface-variant hover:text-error transition-colors flex items-center gap-1 font-body-sm text-body-sm">
+                            <span class="material-symbols-outlined text-sm">gavel</span> Abrir Disputa
+                        </button>
+                    </div>
+                </div>
+                <div class="chat-container overflow-y-auto p-6 space-y-6 flex flex-col-reverse">
+                    <!-- Messages -->
+                    <div class="flex justify-end">
+                        <div class="max-w-[70%] bg-primary text-on-primary p-4 rounded-lg rounded-tr-none">
+                            <p class="font-body-sm text-body-sm">Su pago de S/.2.507,25 se encuentra en una bóveda multisig. El vendedor ha sido notificado para enviar el artículo.</p>
+                            <p class="text-[10px] mt-2 opacity-50 text-right">Hoy, 10:25 AM</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-start">
+                        <div class="max-w-[70%] bg-surface-container-highest p-4 rounded-lg rounded-tl-none">
+                            <p class="font-body-sm text-body-sm">Confirmado. Actualmente estamos calibrando el módulo láser. El envío está programado para mañana por la mañana a través de FedEx Express.</p>
+                            <p class="text-[10px] mt-2 text-on-surface-variant">Hoy, 10:45 AM</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-center">
+                        <span class="text-[10px] bg-surface-container px-3 py-1 rounded-full text-on-surface-variant font-bold uppercase tracking-widest">Sistema: Fondos Verificados en Escrow</span>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-outline-variant bg-surface-container-low">
+                    <div class="flex gap-2 items-center bg-white border border-outline-variant p-2 rounded focus-within:ring-2 ring-primary-fixed transition-all">
+                        <button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
+                            <span class="material-symbols-outlined">attach_file</span>
+                        </button>
+                        <input class="flex-1 bg-transparent border-none focus:ring-0 font-body-sm text-body-sm" placeholder="Escriba su mensaje al vendedor..." type="text">
+                        <button class="px-4 py-2 bg-primary text-white rounded font-bold flex items-center gap-2 hover:opacity-90 transition-opacity">
+                            <span class="">Enviar</span>
+                            <span class="material-symbols-outlined text-sm">send</span>
+                        </button>
+                    </div>
+                    <p class="text-[10px] text-on-surface-variant mt-2 text-center italic">Todos los mensajes están cifrados de extremo a extremo y se registran para la resolución de disputas.</p>
+                </div>
+            </article>
+        </div>
+    </div>
+</main>
+
+<!-- Footer Anchor -->
+<footer class="ml-64 border-t border-outline-variant py-8 bg-surface-container-lowest">
+    <div class="flex flex-col md:flex-row justify-between items-center px-gutter max-w-container-max mx-auto gap-4">
+        <span class="font-label-caps text-label-caps font-bold text-primary uppercase">EasyMarket P2P</span>
+        <p class="font-body-sm text-body-sm text-on-surface-variant text-center md:text-left">© 2024 EasyMarket P2P. Todos los derechos reservados. Seguro y Cifrado.</p>
+        <div class="flex gap-6">
+            <a class="text-on-surface-variant hover:text-primary transition-colors underline font-body-sm text-body-sm" href="#">Términos de Servicio</a>
+            <a class="text-on-surface-variant hover:text-primary transition-colors underline font-body-sm text-body-sm" href="#">Política de Privacidad</a>
+        </div>
+    </div>
+</footer>
+
+<script class="">
+    // Micro-interactions
+    document.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('</script></body></html>

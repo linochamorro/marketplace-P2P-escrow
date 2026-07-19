@@ -1,0 +1,43 @@
+# application-dev.yml — overrides para el perfil de desarrollo local
+#
+# Activo cuando: SPRING_PROFILES_ACTIVE=dev (o cuando no se especifica
+# ningún perfil, ya que "dev" es el default configurado en este proyecto).
+#
+# La BD de desarrollo corre en Docker (docker-compose.yml — PHA00TSK03).
+# Las credenciales usan valores por defecto seguros solo para local; en
+# ningún caso se reutilizan en producción.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:easymarket_dev}
+    username: ${DB_USER:easymarket}
+    password: ${DB_PASSWORD:easymarket_dev_pass}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    show-sql: true          # SQL visible en consola solo en dev
+    hibernate:
+      ddl-auto: validate    # Hereda el base pero se redeclara para claridad
+
+# Stripe — claves de test para desarrollo local.
+# Valores por defecto vacíos: la app arranca sin Stripe configurado pero
+# fallará si se intenta crear un PaymentIntent sin la clave real.
+# Las claves reales se proveen como variables de entorno en el shell del
+# desarrollador (ver .env.example en el frontend).
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY:sk_test_REPLACE_ME}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_REPLACE_ME}
+
+# JWT — clave de firma para desarrollo local y CORS.
+# ¡NUNCA usar este valor en producción!
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-key-replace-in-production-min-32-chars}
+    expiration-ms: 86400000   # 24 horas en milisegundos
+  cors:
+    allowed-origins: ${FRONTEND_URL:http://localhost:3000}
+
+# springdoc habilitado en dev
+springdoc:
+  swagger-ui:
+    enabled: true

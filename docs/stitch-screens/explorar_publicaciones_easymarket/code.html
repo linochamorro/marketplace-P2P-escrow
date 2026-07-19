@@ -1,0 +1,435 @@
+<!DOCTYPE html><html class="light" lang="es"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=block" rel="stylesheet"><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">try{
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-highest": "#e0e3e5",
+                        "outline": "#76777d",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed-variant": "#3f465c",
+                        "inverse-surface": "#2d3133",
+                        "primary": "#000000",
+                        "secondary": "#006c49",
+                        "surface-dim": "#d8dadc",
+                        "primary-fixed-dim": "#bec6e0",
+                        "on-surface-variant": "#45464d",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed-variant": "#38485d",
+                        "on-secondary-container": "#00714d",
+                        "primary-container": "#131b2e",
+                        "tertiary": "#000000",
+                        "surface-tint": "#565e74",
+                        "on-secondary-fixed-variant": "#005236",
+                        "on-background": "#191c1e",
+                        "secondary-fixed-dim": "#4edea3",
+                        "surface-container": "#eceef0",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed": "#dae2fd",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-fixed": "#0b1c30",
+                        "on-secondary-fixed": "#002113",
+                        "tertiary-fixed-dim": "#b7c8e1",
+                        "outline-variant": "#c6c6cd",
+                        "on-primary-container": "#7c839b",
+                        "inverse-on-surface": "#eff1f3",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e0e3e5",
+                        "inverse-primary": "#bec6e0",
+                        "surface-container-high": "#e6e8ea",
+                        "on-error": "#ffffff",
+                        "surface-bright": "#f7f9fb",
+                        "secondary-container": "#6cf8bb",
+                        "surface": "#f7f9fb",
+                        "on-primary": "#ffffff",
+                        "on-surface": "#191c1e",
+                        "tertiary-container": "#0b1c30",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed": "#d3e4fe",
+                        "on-primary-fixed": "#131b2e",
+                        "background": "#f7f9fb",
+                        "secondary-fixed": "#6ffbbe",
+                        "surface-container-low": "#f2f4f6",
+                        "on-tertiary-container": "#75859d"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "margin-mobile": "1rem",
+                        "gutter": "1.5rem",
+                        "stack-gap": "1rem",
+                        "section-gap": "4rem",
+                        "container-max": "1280px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "data-mono": ["JetBrains Mono"],
+                        "headline-xl": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "headline-lg-mobile": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-lg": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "data-mono": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                        "headline-xl": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    }catch(_e){}</script></head><body class="bg-background font-body-md text-on-surface">
+<!-- TopNavBar -->
+<header class="bg-surface-container-lowest border-b border-outline-variant w-full h-16 sticky top-0 z-50">
+    <div class="flex justify-between items-center px-gutter max-w-container-max mx-auto h-full">
+        <div class="flex items-center gap-8">
+            <span class="font-headline-md text-headline-md font-bold text-primary">EasyMarket</span>
+            <nav class="hidden md:flex items-center gap-6">
+                <a class="text-primary font-bold border-b-2 border-primary pb-1 font-body-md text-body-md" href="#">Mercado</a>
+                <a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md" href="#">Cómo funciona</a>
+                <a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md" href="#">Acerca de</a>
+            </nav>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="hidden lg:flex items-center bg-surface-container-low px-3 py-1.5 rounded border border-outline-variant">
+                <span class="material-symbols-outlined text-outline mr-2" data-icon="search">search</span>
+                <input class="bg-transparent border-none focus:ring-0 text-body-sm font-body-sm w-64" placeholder="Buscar en el mercado..." type="text">
+            </div>
+            <div class="flex items-center gap-3">
+                <button class="p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors">
+                    <span class="material-symbols-outlined" data-icon="notifications" data-original-icon="notifications">notifications</span>
+                </button>
+                <button class="p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors">
+                    <span class="material-symbols-outlined" data-icon="help_outline" data-original-icon="help_outline">help_outline</span>
+                </button>
+                <button class="ml-2 bg-primary text-on-primary px-4 py-2 rounded-lg font-body-sm text-body-sm font-semibold active:opacity-80 transition-opacity">
+                    Publicar artículo
+                </button>
+                <div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant ml-2">
+                    <img class="w-full h-full object-cover" alt="Perfil de usuario" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCnMK0K3dPzCDN5qyyM-LC6IzmlTuKlGJf5mMXBTEw1tjfStmCLhF_rXmO8yRDGyR9Y543EXX-4JJl6l2aksi2QnLtJkW1k7gcmfnVRZP-lC3iENV7sLAqDuE-rB4apqLZEo7vGnYSynDHZ3TrUP-O4FTNY84CxQ2JK5jg_NlhdBImw3afrWN06kiICigmsqTqdHCdFRbqEX7gJtZC0rf1hpWebm50aXBMBOh1ubdg63OVkMiP86nO_djkPqacXWK86EJooJFapVtSN">
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+<main class="max-w-container-max mx-auto px-gutter py-8 flex flex-col md:flex-row gap-gutter">
+    <!-- Sidebar Filters -->
+    <aside class="w-full md:w-64 flex-shrink-0 space-y-8">
+        <div>
+            <h3 class="font-headline-md text-body-md font-bold mb-4">Categorías</h3>
+            <div class="space-y-2">
+                <label class="flex items-center gap-3 group cursor-pointer">
+                    <input class="rounded border-outline-variant text-primary focus:ring-primary w-4 h-4" type="checkbox">
+                    <span class="font-body-sm text-body-sm text-on-surface-variant group-hover:text-primary transition-colors">Electrónica</span>
+                </label>
+                <label class="flex items-center gap-3 group cursor-pointer">
+                    <input class="rounded border-outline-variant text-primary focus:ring-primary w-4 h-4" type="checkbox">
+                    <span class="font-body-sm text-body-sm text-on-surface-variant group-hover:text-primary transition-colors">Servicios</span>
+                </label>
+                <label class="flex items-center gap-3 group cursor-pointer">
+                    <input class="rounded border-outline-variant text-primary focus:ring-primary w-4 h-4" type="checkbox">
+                    <span class="font-body-sm text-body-sm text-on-surface-variant group-hover:text-primary transition-colors">Inmuebles</span>
+                </label>
+            </div>
+        </div>
+        <div class="">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-headline-md text-body-md font-bold">Rango de Precio</h3>
+                <span class="font-data-mono text-data-mono text-outline">S/.0 - S/.5,000</span>
+            </div>
+            <input class="w-full h-1 bg-surface-container-highest rounded-lg appearance-none cursor-pointer" max="5000" min="0" step="50" type="range">
+            <div class="flex justify-between mt-2 font-data-mono text-label-caps text-outline"><span class="">S/.0</span><span class="">S/.5k+</span></div>
+        </div>
+        <div class="">
+            <h3 class="font-headline-md text-body-md font-bold mb-4">Calificación del Vendedor</h3>
+            <div class="space-y-2">
+                <label class="flex items-center gap-3 group cursor-pointer">
+                    <input class="border-outline-variant text-primary focus:ring-primary w-4 h-4" name="rating" type="radio">
+                    <div class="flex text-amber-500">
+                        <span class="material-symbols-outlined text-[18px]" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+                        <span class="material-symbols-outlined text-[18px]" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+                        <span class="material-symbols-outlined text-[18px]" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+                        <span class="material-symbols-outlined text-[18px]" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+                        <span class="material-symbols-outlined text-[18px]" data-icon="star_outline">star_outline</span>
+                    </div>
+                    <span class="font-body-sm text-body-sm text-on-surface-variant">o más</span>
+                </label>
+            </div>
+        </div>
+        <div class="pt-4 border-t border-outline-variant">
+            <div class="flex items-center justify-between">
+                <span class="font-body-sm text-body-sm font-semibold">Mejores Vendedores</span>
+                <button class="relative inline-flex h-6 w-11 items-center rounded-full bg-surface-container-highest transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2" onclick="this.classList.toggle('bg-secondary'); this.querySelector('span').classList.toggle('translate-x-5');">
+                    <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-1"></span>
+                </button>
+            </div>
+        </div>
+        <div class="bg-surface-container-low p-4 rounded-lg border border-outline-variant">
+            <div class="flex items-center gap-2 mb-2 text-secondary">
+                <span class="material-symbols-outlined" data-icon="verified_user">verified_user</span>
+                <span class="font-label-caps text-label-caps font-bold">SEGURIDAD ESCROW</span>
+            </div>
+            <p class="font-body-sm text-[12px] leading-relaxed text-on-surface-variant">
+                Todas las transacciones están protegidas por nuestro sistema escrow multi-firma. Los fondos se retienen de forma segura hasta que ambas partes confirman la entrega.
+            </p>
+        </div>
+    </aside>
+    <!-- Main Grid -->
+    <section class="flex-1">
+        <div class="flex justify-between items-end mb-8">
+            <div>
+                <h1 class="font-headline-lg text-headline-lg text-primary">Anuncios del Mercado</h1>
+                <p class="text-on-surface-variant font-body-md">Mostrando 1,240 ofertas verificadas entre particulares</p>
+            </div>
+            <div class="flex items-center gap-2 bg-surface-container-lowest border border-outline-variant rounded-lg px-3 py-1.5">
+                <span class="font-body-sm text-body-sm text-on-surface-variant">Ordenar por:</span>
+                <select class="bg-transparent border-none focus:ring-0 font-body-sm text-body-sm font-semibold py-0 pl-1 pr-8">
+                    <option>Más recientes</option>
+                    <option>Precio: Menor a Mayor</option>
+                    <option>Precio: Mayor a Menor</option>
+                    <option>Calificación del Vendedor</option>
+                </select>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Product Card 1 -->
+            <article class="group bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden hover:border-primary transition-all hover:shadow-lg">
+                <div class="relative h-48 w-full overflow-hidden">
+                    <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="iPhone 15 Pro Max" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCW2hXIIVIyDtIzVx2DaHfUnl3txv6wMuPvgYKOwozlebs5QfNmDSEggHAXfV_S2og9pNZS3uOEVol1OdaZuKOhJa7nPnnZ21rwxaqWRcSzIRVLqwW68yZF2ues-lqI6oyx59hLEWPAVPsbG79CadAd20APkWNA0BiDREryYwD-3d1H9TJEBZgrgvp3ZsjhquAHGY7ifgGC2yQFZKyiMQOOdlg_8u9msD2XtI2dcimVXTivmQ1P1ncQ965HCO2jcMSjEASnyofduMly">
+                    <div class="absolute top-3 left-3 bg-secondary-container text-on-secondary-container px-2 py-1 rounded-sm flex items-center gap-1 shadow-sm">
+                        <span class="material-symbols-outlined text-[14px]" data-icon="shield_with_heart" style="font-variation-settings: 'FILL' 1;">shield_with_heart</span>
+                        <span class="font-label-caps text-[10px] font-bold">PROTECCIÓN ESCROW</span>
+                    </div>
+                    <button class="absolute bottom-3 right-3 bg-white/90 backdrop-blur p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span class="material-symbols-outlined text-primary" data-icon="favorite_border">favorite_border</span>
+                    </button>
+                </div>
+                <div class="p-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <h2 class="font-headline-md text-body-md font-bold line-clamp-1">iPhone 15 Pro Max - Libre</h2>
+                        <span class="font-data-mono text-body-md font-bold">S/.1,050</span>
+                    </div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-5 h-5 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+                            <img class="w-full h-full object-cover" alt="Vendedor verificado" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdLQf99Kmiutm9yHk_D1KEgYfPpCny7sum--81idIrPTrmxmhsY42Qta0P9BaDj1-fAd_D8107sRliYwAZYliE0WeZhbbtiqoyO-k8zheh7ModqHcOP-L4nNtSHqJ8OE7SBQ0S5MjE0iT7o1gfChdQt_eEAu_mj_VtXEVm4jwCmeI1sbuS6W85PVGnxVlXIiF0DMxj8eRO8a71GyMtPL8FiyP8jlfCGGbRQWIhE55l5NFjWGQRu71OPKpkGE3ICohAvZbGgCXmP5sH">
+                        </div>
+                        <span class="font-body-sm text-[12px] text-on-surface-variant">TechTrader_Vip</span>
+                        <div class="flex items-center gap-1 ml-auto text-secondary font-data-mono text-[12px] font-bold">
+                            <span class="material-symbols-outlined text-[14px]" data-icon="verified" style="font-variation-settings: 'FILL' 1;">verified</span>
+                            99.8%
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="w-full py-2 border border-outline-variant rounded-lg font-body-sm text-[13px] font-semibold hover:bg-surface-container-low transition-colors">Detalles</button>
+                        <button class="w-full py-2 bg-primary text-on-primary rounded-lg font-body-sm text-[13px] font-semibold hover:opacity-90 transition-opacity">Comprar</button>
+                    </div>
+                </div>
+            </article>
+            <!-- Product Card 2 -->
+            <article class="group bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden hover:border-primary transition-all hover:shadow-lg">
+                <div class="relative h-48 w-full overflow-hidden">
+                    <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Villa Alpina" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXtfFIhyNtZl8eMJ3Hh6IUggF6b_GqOGgrMNI1UyprwKOqLFS_MUsGyJ8SpQeaFuykQ-KIr8nutqD9ihQv-yMPIcWetFFT1HzNiAAnmsQQmz0XrFmONk7MaGwziGEdpjsD-TVXG3XYHazuI2XkWfcySIWn_nWGzQK1KPg5bH71HRIF7FnuJpcTR7Zq3Mb7SRzr2cJ_xEuxGtNO73IDW26eGffKbXXKrCzvdqPAqlqqhMrqWoLcU9F_y_rkK_SVLtKAH2KJYZBCD7k-">
+                    <div class="absolute top-3 left-3 bg-secondary-container text-on-secondary-container px-2 py-1 rounded-sm flex items-center gap-1 shadow-sm">
+                        <span class="material-symbols-outlined text-[14px]" data-icon="shield_with_heart" style="font-variation-settings: 'FILL' 1;">shield_with_heart</span>
+                        <span class="font-label-caps text-[10px] font-bold">PROTECCIÓN ESCROW</span>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <h2 class="font-headline-md text-body-md font-bold line-clamp-1">Villa Moderna Alpina - 3 Noches</h2>
+                        <span class="font-data-mono text-body-md font-bold">S/.2,400</span>
+                    </div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-5 h-5 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+                            <img class="w-full h-full object-cover" alt="Agente de inmobiliaria" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPJbZVIeNESZOgrwc7rtGDjt9LLiO0cClHdpp4nHKlK2lDOLlmzodvHHt1Bj9eA4vDGFht87YSKe2ieDl7o9eMFo8lDqNXZV-UWjMhe1E66fPAYwzB6s4iyJOAJ2T_TPfv1KNpdacEGfci77WOYdlwiZIFfTa_EJwYDLA_X1scDSVeK72u42GbVViZXjasbYn2fKFNrr4RKj-pFFXzP4nLArjC0_LZY-brkfnpadQHSXiNZTd2Xp0n7DY5XWfPXsH0Bod3PzYWKeBo">
+                        </div>
+                        <span class="font-body-sm text-[12px] text-on-surface-variant">LuxeEstates</span>
+                        <div class="flex items-center gap-1 ml-auto text-secondary font-data-mono text-[12px] font-bold">
+                            <span class="material-symbols-outlined text-[14px]" data-icon="verified" style="font-variation-settings: 'FILL' 1;">verified</span>
+                            100%
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="w-full py-2 border border-outline-variant rounded-lg font-body-sm text-[13px] font-semibold hover:bg-surface-container-low transition-colors">Detalles</button>
+                        <button class="w-full py-2 bg-primary text-on-primary rounded-lg font-body-sm text-[13px] font-semibold hover:opacity-90 transition-opacity">Reservar</button>
+                    </div>
+                </div>
+            </article>
+            <!-- Product Card 3 -->
+            <article class="group bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden hover:border-primary transition-all hover:shadow-lg">
+                <div class="relative h-48 w-full overflow-hidden">
+                    <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="PC Personalizada" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBU9lGemtoFEzwmEEo_98bHSHhmIHi_KSWSzK9PHhcn6CSPYHR50WIvTbf5vmsyjjqK-6tJ7Krb3VJaP39W67qeSq4qPCQxipdA8l5-H5g0K10PeqJ1c9XS70zKlBeP820WLkOfb9rPriRrgIN9cAF8DMLHdwnPPmbt2YvWlAXRKKlo7F20YlEjyzPdVbdcCC_hRXKZhOzEYuM6ZextEy9JLpab_3X3FkcefLgDZY1bucMS0zfg8F3MMiI-uFFmn9Urp_DsPDNIHPA">
+                    <div class="absolute top-3 left-3 bg-secondary-container text-on-secondary-container px-2 py-1 rounded-sm flex items-center gap-1 shadow-sm">
+                        <span class="material-symbols-outlined text-[14px]" data-icon="shield_with_heart" style="font-variation-settings: 'FILL' 1;">shield_with_heart</span>
+                        <span class="font-label-caps text-[10px] font-bold">PROTECCIÓN ESCROW</span>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <h2 class="font-headline-md text-body-md font-bold line-clamp-1">Servicio de Montaje PC Personalizado</h2>
+                        <span class="font-data-mono text-body-md font-bold">S/.150/h</span>
+                    </div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-5 h-5 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+                            <img class="w-full h-full object-cover" alt="Especialista" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAtvojgeO6JzVW7_wjCsFWFJgz9RWvHvr2vQCyRes6291MYk4eEBfTK04-qVut1x3GGQGpEC7BMAEPh-UyWkhQPTe67enfry_dvnB9r9DpQ-Cjd3b3W-Jfat7NzJ0cHQVEti1As3TsoSqeLV3xKRipAV__dnUmLdWaFYbP_kRkgl_6g0rr-gyzDN1JIgvZ3IVbjv2YTW-TRPhvb_0xdv4KtUdFs8Kjw01yWAQ20XuvBLP3-6xPOZy8Pf5TWoXS2kSjvQtvXoMpZxbQj">
+                        </div>
+                        <span class="font-body-sm text-[12px] text-on-surface-variant">BuildMaster_Pro</span>
+                        <div class="flex items-center gap-1 ml-auto text-secondary font-data-mono text-[12px] font-bold">
+                            <span class="material-symbols-outlined text-[14px]" data-icon="verified" style="font-variation-settings: 'FILL' 1;">verified</span>
+                            98.2%
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="w-full py-2 border border-outline-variant rounded-lg font-body-sm text-[13px] font-semibold hover:bg-surface-container-low transition-colors">Detalles</button>
+                        <button class="w-full py-2 bg-primary text-on-primary rounded-lg font-body-sm text-[13px] font-semibold hover:opacity-90 transition-opacity">Contratar</button>
+                    </div>
+                </div>
+            </article>
+            <!-- Product Card 4 -->
+            <article class="group bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden hover:border-primary transition-all hover:shadow-lg">
+                <div class="relative h-48 w-full overflow-hidden">
+                    <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Sony Headphones" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAUQk6-Mmc5PyeeTwiecbE5A4dllutxIrYZTs_UEtxGIh9OGiNKXnhc9kVzQBooU1hmTKvWz2NtUJ9JRrz72zuXh3qVyzmqkDoITGUBm09uEN6_vYogCe7dC_GkxywHEhjQuJMfy3PSQ157hOcxom2lMvUDV4RlVREKsL0qIvsdK_ayt0WsZye905gn6nZh-zDMlT4Iry98lMZitcPnc9JIjpRiwYQgAHHAemMhrMYKe1Vjrvh4UetlQhNw8QYUzjktZWXEa6VfRUKb">
+                    <div class="absolute top-3 left-3 bg-secondary-container text-on-secondary-container px-2 py-1 rounded-sm flex items-center gap-1 shadow-sm">
+                        <span class="material-symbols-outlined text-[14px]" data-icon="shield_with_heart" style="font-variation-settings: 'FILL' 1;">shield_with_heart</span>
+                        <span class="font-label-caps text-[10px] font-bold">PROTECCIÓN ESCROW</span>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <h2 class="font-headline-md text-body-md font-bold line-clamp-1">Sony WH-1000XM5 - Precintado</h2>
+                        <span class="font-data-mono text-body-md font-bold">S/.299</span>
+                    </div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-5 h-5 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+                            <img class="w-full h-full object-cover" alt="Avatar vendedor" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2TepTEQyyxkUJc57wz_mKHpjIihOZcobtwyVsBdR3eQn-TuOy7MIIL0yGHG_JdfCxTfpcLStzPVlp4HjtaRJRAbsz9G44HGh4qLxf0jVZOCcmP1fH6XWwILXkxNr8N5Y8UkgF25tiun5DRGdnj4HFl9qreRic9X-qQE9fXzeMgAg-suTCP7ZS3idgySpYHcGjmrjgA8dakMYSfk1g9UlA3Q9o-qS83EGlcJVQa-XQ4Vz3bIylLTWfOsUAeaqk2wMr9kvplF7CXnnF">
+                        </div>
+                        <span class="font-body-sm text-[12px] text-on-surface-variant">AudioFile_Ship</span>
+                        <div class="flex items-center gap-1 ml-auto text-secondary font-data-mono text-[12px] font-bold">
+                            <span class="material-symbols-outlined text-[14px]" data-icon="verified" style="font-variation-settings: 'FILL' 1;">verified</span>
+                            97.5%
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="w-full py-2 border border-outline-variant rounded-lg font-body-sm text-[13px] font-semibold hover:bg-surface-container-low transition-colors">Detalles</button>
+                        <button class="w-full py-2 bg-primary text-on-primary rounded-lg font-body-sm text-[13px] font-semibold hover:opacity-90 transition-opacity">Comprar</button>
+                    </div>
+                </div>
+            </article>
+            <!-- Product Card 5 -->
+            <article class="group bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden hover:border-primary transition-all hover:shadow-lg">
+                <div class="relative h-48 w-full overflow-hidden">
+                    <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Cámara Sony" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAInwN6mWbKp6HlcXwg8dTchiUEK--I8dlVuN2TDpjjnz5mYSx8SmNoEAD2y4GI8bgDPG5ur1CplFAmfdACccJ2-WgrdRvJX7yjsPfWBiNpzOgeyVtmALmmHlxXPvcRiWY0UrUDWbVTakArftrxH_eWcQJYwxoJC8gldJ6OEz2WYwIJVRcf4ZBUdpL7qVoeOgunQuWDLn2KlOBF4xX-3mjVF00n8mo49S9Z09txZtIhxM5FJtdOOIcgo6kxFU_Tec5wiCe2Lm7hIbIY">
+                    <div class="absolute top-3 left-3 bg-secondary-container text-on-secondary-container px-2 py-1 rounded-sm flex items-center gap-1 shadow-sm">
+                        <span class="material-symbols-outlined text-[14px]" data-icon="shield_with_heart" style="font-variation-settings: 'FILL' 1;">shield_with_heart</span>
+                        <span class="font-label-caps text-[10px] font-bold">PROTECCIÓN ESCROW</span>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <h2 class="font-headline-md text-body-md font-bold line-clamp-1">Sony A7IV Solo Cuerpo - Como nuevo</h2>
+                        <span class="font-data-mono text-body-md font-bold">S/.1,850</span>
+                    </div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-5 h-5 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+                            <img class="w-full h-full object-cover" alt="Avatar fotógrafo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBObAnmY9Nn3PGRgKMho5mPXtaoQbBWl2JNzNXWSKaAFCCkeihFJlpfhzKGNNMlgdxGEz0cmD4br2w1ia59LkA28qvjzAhn-gN8PWhwXLIbDDUXPsTq2rTn5G9TiSHGjeHmzy_aJkNCtlvyRtozAZntfkybvbR8Decew3UK8RhF9qHHu9i330MBb4OwVeigGud5c8xtbkSySxrDu25Eb8xYpPoFyxfiDj6v5HMquQ0rWBXgaaaS8PERcJr8iJrmym-A7CUxUlFhd7BV">
+                        </div>
+                        <span class="font-body-sm text-[12px] text-on-surface-variant">PhotoMarket_HQ</span>
+                        <div class="flex items-center gap-1 ml-auto text-secondary font-data-mono text-[12px] font-bold">
+                            <span class="material-symbols-outlined text-[14px]" data-icon="verified" style="font-variation-settings: 'FILL' 1;">verified</span>
+                            99.1%
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="w-full py-2 border border-outline-variant rounded-lg font-body-sm text-[13px] font-semibold hover:bg-surface-container-low transition-colors">Detalles</button>
+                        <button class="w-full py-2 bg-primary text-on-primary rounded-lg font-body-sm text-[13px] font-semibold hover:opacity-90 transition-opacity">Comprar</button>
+                    </div>
+                </div>
+            </article>
+            <!-- Product Card 6 -->
+            <article class="group bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden hover:border-primary transition-all hover:shadow-lg">
+                <div class="relative h-48 w-full overflow-hidden">
+                    <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Espacio de oficina" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAdG7q1JcdI7o4R2_ZS-JYMCZz5SAcZ3IUzTkNYXsBrJjTy86utGLfSuFoUWLpGLnjwpnhA1K3L_SP1y6aInSaM6hHA4e3BYLNWskHPnrU_GjWftdAg9hzVaWx4L7xwRrATUD2Fwqu2PuClXQvMAxO8ECYJ281InD4DUcmOb6IZCfj63x1Zi0T1_E0F9XuatryDTw7zXNZOKj1exH8LdmQx_JNbfZXr7pjMwuGMr75Yiy84FjUyEeM4l2VBcbB7TUiQ57wWOlbLiaa8">
+                    <div class="absolute top-3 left-3 bg-secondary-container text-on-secondary-container px-2 py-1 rounded-sm flex items-center gap-1 shadow-sm">
+                        <span class="material-symbols-outlined text-[14px]" data-icon="shield_with_heart" style="font-variation-settings: 'FILL' 1;">shield_with_heart</span>
+                        <span class="font-label-caps text-[10px] font-bold">PROTECCIÓN ESCROW</span>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <h2 class="font-headline-md text-body-md font-bold line-clamp-1">Pase de Oficina Compartida - Centro</h2>
+                        <span class="font-data-mono text-body-md font-bold">S/.45/día</span>
+                    </div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-5 h-5 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+                            <img class="w-full h-full object-cover" alt="Avatar coworking" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwRzcxuRkxsdQgNLoYCPDWBkKa5QMwxrh56tNHzmuh_MNzaUOIhiB6WGTxIbB0KLtLziR2cw5ohUGsjH2qp83uLLwB3sGG7FjkHTiUYVTTzatQHz--QjuFoin3E6c_DZXTxXdaKOg8ilvDjxPsyaF4Wd_QHhTotxPw5bxv00P5mdyd9GOaovrGABqbCy_7CKW5r1k8jwhhqv6Dvnp4g0KstDSQed1tK7W1gcfV4ZI_d2U92rZRq4x4WCbYa-qRX-pQOUJ3eCq2bB1S">
+                        </div>
+                        <span class="font-body-sm text-[12px] text-on-surface-variant">Hub_Workspace</span>
+                        <div class="flex items-center gap-1 ml-auto text-secondary font-data-mono text-[12px] font-bold">
+                            <span class="material-symbols-outlined text-[14px]" data-icon="verified" style="font-variation-settings: 'FILL' 1;">verified</span>
+                            96.8%
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="w-full py-2 border border-outline-variant rounded-lg font-body-sm text-[13px] font-semibold hover:bg-surface-container-low transition-colors">Detalles</button>
+                        <button class="w-full py-2 bg-primary text-on-primary rounded-lg font-body-sm text-[13px] font-semibold hover:opacity-90 transition-opacity">Reservar</button>
+                    </div>
+                </div>
+            </article>
+        </div>
+        <!-- Pagination -->
+        <div class="mt-12 flex justify-center items-center gap-2">
+            <button class="p-2 border border-outline-variant rounded-lg hover:bg-surface-container-low transition-colors disabled:opacity-50" disabled="">
+                <span class="material-symbols-outlined" data-icon="chevron_left">chevron_left</span>
+            </button>
+            <button class="w-10 h-10 bg-primary text-on-primary rounded-lg font-body-sm font-bold">1</button>
+            <button class="w-10 h-10 border border-outline-variant text-on-surface hover:bg-surface-container-low rounded-lg font-body-sm font-bold transition-colors">2</button>
+            <button class="w-10 h-10 border border-outline-variant text-on-surface hover:bg-surface-container-low rounded-lg font-body-sm font-bold transition-colors">3</button>
+            <span class="mx-2 text-outline">...</span>
+            <button class="w-10 h-10 border border-outline-variant text-on-surface hover:bg-surface-container-low rounded-lg font-body-sm font-bold transition-colors">42</button>
+            <button class="p-2 border border-outline-variant rounded-lg hover:bg-surface-container-low transition-colors">
+                <span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span>
+            </button>
+        </div>
+    </section>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest border-t border-outline-variant w-full py-8 mt-section-gap">
+    <div class="flex flex-col md:flex-row justify-between items-center px-gutter max-w-container-max mx-auto gap-4">
+        <div class="flex flex-col gap-2">
+            <span class="font-label-caps text-label-caps font-bold text-primary">EASYMARKET P2P</span>
+            <p class="font-body-sm text-body-sm text-on-surface-variant">© 2024 EasyMarket P2P. Todos los derechos reservados. Compra Segura y Cifrada.</p>
+        </div>
+        <div class="flex flex-wrap justify-center gap-6">
+            <a class="text-on-surface-variant hover:text-primary transition-colors underline font-body-sm text-body-sm" href="#">Términos de Servicio</a>
+            <a class="text-on-surface-variant hover:text-primary transition-colors underline font-body-sm text-body-sm" href="#">Política de Privacidad</a>
+            <a class="text-on-surface-variant hover:text-primary transition-colors underline font-body-sm text-body-sm" href="#">Acuerdo de Escrow</a>
+            <a class="text-on-surface-variant hover:text-primary transition-colors underline font-body-sm text-body-sm" href="#">Protección contra Fraude</a>
+        </div>
+        <div class="flex gap-4">
+            <span class="material-symbols-outlined text-outline cursor-pointer hover:text-primary" data-icon="language">language</span>
+            <span class="material-symbols-outlined text-outline cursor-pointer hover:text-primary" data-icon="security">security</span>
+        </div>
+    </div>
+</footer>
+<script class="">
+    // Simple Micro-interaction: Update Price Range Label
+    const rangeInput = document.querySelector('input[type="range"]');
+    const priceDisplay = document.querySelector('.text-outline.font-data-mono');
+    
+    if(rangeInput) {
+        rangeInput.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            priceDisplay.textContent = `$0 - $${val.toLocaleString()}${val === 5000 ? '+' : ''}`;
+        });</script></body></html>

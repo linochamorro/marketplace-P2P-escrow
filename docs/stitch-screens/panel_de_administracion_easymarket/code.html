@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EasyMarket | Panel de Moderación de Administración</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-highest": "#e0e3e5",
+                    "outline": "#76777d",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed-variant": "#3f465c",
+                    "inverse-surface": "#2d3133",
+                    "primary": "#000000",
+                    "secondary": "#006c49",
+                    "surface-dim": "#d8dadc",
+                    "primary-fixed-dim": "#bec6e0",
+                    "on-surface-variant": "#45464d",
+                    "on-error-container": "#93000a",
+                    "on-tertiary-fixed-variant": "#38485d",
+                    "on-secondary-container": "#00714d",
+                    "primary-container": "#131b2e",
+                    "tertiary": "#000000",
+                    "surface-tint": "#565e74",
+                    "on-secondary-fixed-variant": "#005236",
+                    "on-background": "#191c1e",
+                    "secondary-fixed-dim": "#4edea3",
+                    "surface-container": "#eceef0",
+                    "surface-container-lowest": "#ffffff",
+                    "primary-fixed": "#dae2fd",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed": "#0b1c30",
+                    "on-secondary-fixed": "#002113",
+                    "tertiary-fixed-dim": "#b7c8e1",
+                    "outline-variant": "#c6c6cd",
+                    "on-primary-container": "#7c839b",
+                    "inverse-on-surface": "#eff1f3",
+                    "error": "#ba1a1a",
+                    "surface-variant": "#e0e3e5",
+                    "inverse-primary": "#bec6e0",
+                    "surface-container-high": "#e6e8ea",
+                    "on-error": "#ffffff",
+                    "surface-bright": "#f7f9fb",
+                    "secondary-container": "#6cf8bb",
+                    "surface": "#f7f9fb",
+                    "on-primary": "#ffffff",
+                    "on-surface": "#191c1e",
+                    "tertiary-container": "#0b1c30",
+                    "error-container": "#ffdad6",
+                    "tertiary-fixed": "#d3e4fe",
+                    "on-primary-fixed": "#131b2e",
+                    "background": "#f7f9fb",
+                    "secondary-fixed": "#6ffbbe",
+                    "surface-container-low": "#f2f4f6",
+                    "on-tertiary-container": "#75859d"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "margin-mobile": "1rem",
+                    "gutter": "1.5rem",
+                    "stack-gap": "1rem",
+                    "section-gap": "4rem",
+                    "container-max": "1280px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "data-mono": ["JetBrains Mono"],
+                    "headline-xl": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "data-mono": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "headline-xl": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #F8FAFC;
+            color: #191c1e;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 1.5rem;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md overflow-x-hidden">
+<!-- SideNavBar Anchor -->
+<aside class="h-full w-64 fixed left-0 top-0 bg-surface-container-low dark:bg-surface-container-low border-r border-outline-variant dark:border-outline z-50">
+<div class="flex flex-col h-full p-4 space-y-2">
+<div class="mb-8 px-2">
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary">EasyMarket</h1>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold mt-1">Portal de Gestión</p>
+</div>
+<!-- Profile Header -->
+<div class="flex items-center gap-3 px-2 mb-8">
+<img alt="Un retrato profesional de un administrador corporativo en una oficina de alta tecnología." class="w-10 h-10 rounded-lg object-cover border border-outline-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2qQ8sKfl8qPxc8juScWXHI_bqsIFWEOQlfRU2ff0_6YYa56e7O-I-GQLY3_V9ZWCf7qdNl604vk5NdmxsWlQm-79hAoxwFmwowmyiXuyZ8-4jKqTME6_nwV-QF9DAX0xOGWwS-tPLYjTltcjtPJGlnI-OQRUUY9w8TzqAY9Hlrs57VS9HR_XqKxufAABrSowyOd_9xfDR-4yiy1heGMSyO3OdYQHYcCctHNZgfq7-z7saVzqThrnwKB2tYwdKHKcL2wUbiK658zjJ"/>
+<div class="flex flex-col overflow-hidden">
+<span class="font-body-sm text-body-sm font-bold truncate">Cuenta de Admin Verificada</span>
+<span class="text-[11px] text-on-surface-variant truncate">Administración</span>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<!-- Dashboard Active -->
+<a class="bg-primary text-on-primary rounded-lg flex items-center gap-3 px-4 py-2 transition-transform active:scale-95" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-sm text-body-sm">Panel de Control</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+<span class="font-body-sm text-body-sm">Transacciones Activas</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+<span class="material-symbols-outlined">gavel</span>
+<span class="font-body-sm text-body-sm">Centro de Disputas</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-body-sm text-body-sm">Billetera</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-sm text-body-sm">Configuración</span>
+</a>
+</nav>
+<button class="w-full bg-primary-container text-on-primary-container font-body-sm text-body-sm py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 mb-4 hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                Nueva Resolución
+            </button>
+<div class="pt-4 border-t border-outline-variant space-y-1">
+<a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+<span class="material-symbols-outlined">security</span>
+<span class="font-body-sm text-body-sm">Registro de Seguridad</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-2 transition-colors" href="#">
+<span class="material-symbols-outlined">contact_support</span>
+<span class="font-body-sm text-body-sm">Soporte</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 min-h-screen p-8 max-w-[1440px]">
+<!-- Header -->
+<header class="mb-10 flex justify-between items-end">
+<div>
+<h2 class="font-headline-xl text-headline-xl text-primary tracking-tight">Moderación del Sistema</h2>
+<p class="text-on-surface-variant font-body-md mt-1">Supervisión en tiempo real de las operaciones de depósito peer-to-peer.</p>
+</div>
+<div class="flex gap-3">
+<div class="px-4 py-2 bg-surface-container-highest rounded border border-outline-variant flex items-center gap-2">
+<span class="w-2 h-2 bg-secondary rounded-full animate-pulse"></span>
+<span class="font-data-mono text-data-mono uppercase">Red en Vivo</span>
+</div>
+</div>
+</header>
+<!-- Analytics Bento Grid -->
+<section class="bento-grid mb-gutter">
+<!-- Total Volume -->
+<div class="col-span-12 md:col-span-4 bg-surface-container-lowest border border-outline-variant p-6 rounded-lg relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">account_balance</span>
+</div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-4">Volumen Total en Depósito</h3>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-lg text-headline-lg text-primary">S/.42,890,211.00</span>
+<span class="text-secondary font-body-sm font-bold">+12.4%</span>
+</div>
+<div class="mt-4 h-1 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary w-2/3"></div>
+</div>
+</div>
+<!-- Active Users -->
+<div class="col-span-12 md:col-span-4 bg-surface-container-lowest border border-outline-variant p-6 rounded-lg relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">group</span>
+</div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-4">Usuarios Activos en Plataforma</h3>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-lg text-headline-lg text-primary">128,402</span>
+<span class="text-secondary font-body-sm font-bold">+3.2k</span>
+</div>
+<p class="text-[11px] text-on-surface-variant mt-2 font-data-mono">98% IDENTIDAD VERIFICADA</p>
+</div>
+<!-- Resolution Rate -->
+<div class="col-span-12 md:col-span-4 bg-surface-container-lowest border border-outline-variant p-6 rounded-lg relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">verified</span>
+</div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-4">Tasa de Resolución de Disputas</h3>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-lg text-headline-lg text-primary">94.8%</span>
+<span class="text-outline font-body-sm">PROM 4.2H</span>
+</div>
+<p class="text-[11px] text-on-surface-variant mt-2 font-data-mono">REFERENCIA: 90%</p>
+</div>
+</section>
+<!-- Moderation Tables -->
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-gutter">
+<!-- Pending Reports -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-lg flex flex-col">
+<div class="p-6 border-b border-outline-variant flex justify-between items-center">
+<div>
+<h3 class="font-headline-md text-headline-md text-primary">Reportes Pendientes</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Alertas no revisadas en publicaciones de usuarios</p>
+</div>
+<span class="px-3 py-1 bg-error-container text-on-error-container rounded font-bold text-[12px]">14 NUEVOS</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="px-6 py-4 font-label-caps text-label-caps text-on-surface-variant">ENTIDAD</th>
+<th class="px-6 py-4 font-label-caps text-label-caps text-on-surface-variant">RAZÓN</th>
+<th class="px-6 py-4 font-label-caps text-label-caps text-on-surface-variant">ACCIONES</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<tr class="hover:bg-surface-bright transition-colors group">
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="font-bold text-primary">Dominio Premium: x.eth</span>
+<span class="text-xs text-on-surface-variant font-data-mono">PUB_89231</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-0.5 bg-surface-container text-outline rounded text-[11px] font-bold uppercase">Precio Sospechoso</span>
+</td>
+<td class="px-6 py-4">
+<button class="bg-primary text-on-primary px-3 py-1.5 rounded font-body-sm text-body-sm hover:opacity-80 transition-opacity">Moderar Publicación</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="font-bold text-primary">Pedido de GPUs al por mayor #12</span>
+<span class="text-xs text-on-surface-variant font-data-mono">PUB_77102</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-0.5 bg-surface-container text-outline rounded text-[11px] font-bold uppercase">Artículo Prohibido</span>
+</td>
+<td class="px-6 py-4">
+<button class="bg-primary text-on-primary px-3 py-1.5 rounded font-body-sm text-body-sm hover:opacity-80 transition-opacity">Moderar Publicación</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="font-bold text-primary">Nombre de Red Social</span>
+<span class="text-xs text-on-surface-variant font-data-mono">PUB_90112</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-0.5 bg-surface-container text-outline rounded text-[11px] font-bold uppercase">Robo de Identidad</span>
+</td>
+<td class="px-6 py-4">
+<button class="bg-primary text-on-primary px-3 py-1.5 rounded font-body-sm text-body-sm hover:opacity-80 transition-opacity">Moderar Publicación</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Open Disputes -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-lg flex flex-col">
+<div class="p-6 border-b border-outline-variant flex justify-between items-center">
+<div>
+<h3 class="font-headline-md text-headline-md text-primary">Disputas Abiertas</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Conflictos activos de depósito que requieren arbitraje</p>
+</div>
+<span class="px-3 py-1 bg-secondary-container text-on-secondary-container rounded font-bold text-[12px]">8 CRÍTICAS</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="px-6 py-4 font-label-caps text-label-caps text-on-surface-variant">TRANSACCIÓN</th>
+<th class="px-6 py-4 font-label-caps text-label-caps text-on-surface-variant">VALOR</th>
+<th class="px-6 py-4 font-label-caps text-label-caps text-on-surface-variant">ACCIONES ADMIN</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="font-bold text-primary">Comprador vs Vendedor (Bienes Digitales)</span>
+<span class="text-xs text-on-surface-variant font-data-mono">ESC_44021</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="font-data-mono text-primary">S/.12,400.00</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex gap-2">
+<button class="bg-surface-container-highest text-primary px-3 py-1.5 rounded font-body-sm text-body-sm hover:bg-outline-variant transition-colors">Ver Detalles</button>
+<button class="border border-error text-error px-3 py-1.5 rounded font-body-sm text-body-sm hover:bg-error hover:text-on-error transition-colors">Congelar Fondos</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="font-bold text-primary">Reclamo de Servicios Incompletos</span>
+<span class="text-xs text-on-surface-variant font-data-mono">ESC_44900</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="font-data-mono text-primary">S/.4,200.00</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex gap-2">
+<button class="bg-surface-container-highest text-primary px-3 py-1.5 rounded font-body-sm text-body-sm hover:bg-outline-variant transition-colors">Ver Detalles</button>
+<button class="border border-error text-error px-3 py-1.5 rounded font-body-sm text-body-sm hover:bg-error hover:text-on-error transition-colors">Congelar Fondos</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="font-bold text-primary">Disputa por Entrega Parcial</span>
+<span class="text-xs text-on-surface-variant font-data-mono">ESC_45102</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="font-data-mono text-primary">S/.8,950.00</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex gap-2">
+<button class="bg-surface-container-highest text-primary px-3 py-1.5 rounded font-body-sm text-body-sm hover:bg-outline-variant transition-colors">Ver Detalles</button>
+<button class="border border-error text-error px-3 py-1.5 rounded font-body-sm text-body-sm hover:bg-error hover:text-on-error transition-colors">Congelar Fondos</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+<!-- System Status Bar -->
+<footer class="mt-section-gap pt-8 border-t border-outline-variant flex flex-col md:flex-row justify-between items-center text-on-surface-variant gap-4">
+<p class="font-body-sm text-body-sm">© 2024 EasyMarket P2P. Todos los derechos reservados. Seguro y Encriptado.</p>
+<div class="flex gap-6 font-body-sm text-body-sm">
+<a class="hover:text-primary transition-colors underline" href="#">Términos de Servicio</a>
+<a class="hover:text-primary transition-colors underline" href="#">Política de Privacidad</a>
+<a class="hover:text-primary transition-colors underline" href="#">Acuerdo de Depósito</a>
+<a class="hover:text-primary transition-colors underline" href="#">Protección contra Fraude</a>
+</div>
+</footer>
+</main>
+<!-- Micro-interaction Script -->
+<script>
+        document.querySelectorAll('button').forEach(button => {
+            button.addEventListener('mousedown', () => {
+                button.classList.add('scale-95');
+            });
+            button.addEventListener('mouseup', () => {
+                button.classList.remove('scale-95');
+            });
+            button.addEventListener('mouseleave', () => {
+                button.classList.remove('scale-95');
+            });
+        });
+
+        // Simulando actualizaciones de datos
+        setInterval(() => {
+            const volumeEl = document.querySelector('.font-headline-lg');
+            if (volumeEl && volumeEl.innerText.includes('$42,890,211.00')) {
+                const current = 42890211.00;
+                const rand = (Math.random() * 1000).toFixed(2);
+                volumeEl.innerText = `$${(current + parseFloat(rand)).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+            }
+        }, 5000);
+    </script>
+</body></html>

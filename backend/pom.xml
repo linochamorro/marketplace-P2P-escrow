@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        Spring Boot parent BOM — gestiona versiones de todas las dependencias
+        de Spring (framework, security, data, test) y Hibernate de forma
+        coherente. Al usar spring-boot-starter-parent no se necesita declarar
+        versión en ningún starter de Spring.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.0</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
+    <groupId>com.easymarket</groupId>
+    <artifactId>marketplace</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>marketplace</name>
+    <description>EasyMarket — Marketplace P2P con Escrow (portfolio)</description>
+
+    <properties>
+        <!-- Java 21 LTS — decisión de plan.md -->
+        <java.version>21</java.version>
+
+        <!--
+            Versiones de dependencias externas al BOM de Spring Boot.
+            Se declaran aquí para que sean fácilmente auditables y
+            actualizables sin buscarlas en los <dependency> individuales.
+        -->
+        <stripe-java.version>32.1.0</stripe-java.version>
+        <springdoc-openapi.version>2.8.5</springdoc-openapi.version>
+    </properties>
+
+    <dependencies>
+
+        <!-- ============================================================
+             STARTERS DE PRODUCCIÓN
+             ============================================================ -->
+
+        <!--
+            Spring Web: REST controllers, Servlet API, Jackson (JSON).
+            Incluye spring-webmvc y Tomcat embebido.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!--
+            Spring Data JPA: abstracción de repositorios sobre Hibernate 7.
+            ddl-auto se fija en "validate" en application.yml — Flyway
+            es el único responsable de crear/modificar el esquema.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!--
+            Spring Security: autenticación y autorización.
+            La configuración real (JWT + cookie httpOnly) se implementa
+            en PHA01. Aquí solo se incorpora la dependencia base.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!--
+            Flyway: migraciones de esquema SQL versionadas.
+            ddl-auto=validate garantiza que Hibernate nunca modifica el
+            esquema directamente — todo cambio pasa por una migración Flyway.
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+
+        <!--
+            Flyway PostgreSQL: soporte específico para PostgreSQL 15+.
+            Requerido desde Flyway 10+ para resolver el dialecto correcto.
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!--
+            Driver JDBC de PostgreSQL.
+            Alcance runtime: no se necesita en tiempo de compilación,
+            solo en ejecución y en los tests de integración.
+        -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+            Bean Validation (Jakarta): anotaciones @NotNull, @Min, @Email, etc.
+            Se usa en DTOs de request para validación automática vía
+            @Valid en los controllers.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+            Stripe Java SDK 32.1.0: cliente oficial de Stripe.
+            Se usa para crear PaymentIntents (captura inmediata) y
+            verificar firmas de webhook (Webhook.constructEvent).
+            Versión fijada explícitamente — fuera del BOM de Spring Boot.
+        -->
+        <dependency>
+            <groupId>com.stripe</groupId>
+            <artifactId>stripe-java</artifactId>
+            <version>${stripe-java.version}</version>
+        </dependency>
+
+        <!--
+            springdoc-openapi: genera Swagger UI automáticamente a partir
+            de las anotaciones de los controllers (@Operation, @ApiResponse).
+            UI disponible en /swagger-ui.html en perfil dev.
+            Versión 2.8.x — compatible con Spring Boot 4.x / Spring MVC.
+        -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc-openapi.version}</version>
+        </dependency>
+
+        <!-- ============================================================
+             DEPENDENCIAS DE TEST
+             ============================================================ -->
+
+        <!--
+            spring-boot-starter-test: JUnit 5, Mockito, AssertJ,
+            MockMvc, Spring Test Context. Cubre todos los tests unitarios
+            y de integración del backend.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Spring Security Test: SecurityMockMvcRequestPostProcessors
+            (@WithMockUser, etc.) para tests de integración de endpoints
+            protegidos.
+        -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            spring-boot-testcontainers: integración first-party entre
+            Spring Boot y Testcontainers. Permite usar @ServiceConnection
+            para conectar automáticamente PostgreSQL de Testcontainers
+            al contexto de Spring sin configuración manual de datasource.
+            Versión gestionada por el BOM de Spring Boot 4.1.0.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Testcontainers JUnit 5: integración con el ciclo de vida
+            de JUnit 5 (@Testcontainers, @Container).
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Testcontainers PostgreSQL: imagen oficial de PostgreSQL para
+            tests de integración. Arranca un contenedor real de PostgreSQL
+            por cada clase de test anotada con @Testcontainers.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                Testcontainers BOM: gestiona las versiones de todos los
+                módulos de Testcontainers (junit-jupiter, postgresql, etc.)
+                de forma coherente. Spring Boot 4.1.0 incluye
+                spring-boot-testcontainers pero NO importa automáticamente
+                el BOM de Testcontainers para los artefactos individuales del
+                grupo org.testcontainers — este import lo hace explícito.
+                La versión es la gestionada por el BOM de Spring Boot 4.1.0.
+            -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>1.21.1</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <!--
+                spring-boot-maven-plugin: genera el fat JAR ejecutable
+                con todas las dependencias embebidas. Necesario para el
+                deploy en Railway (java -jar marketplace.jar).
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

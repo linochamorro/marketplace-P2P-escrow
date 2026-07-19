@@ -1,0 +1,40 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Documentación de proceso (uso interno) — solo README.md de raíz se versiona
+*.md
+!/README.md
+
+# Proceso interno de agentes — control local
+.agents/
+docs/avance/
+docs/**/*.bak
+
+# Backend (Maven / Spring Boot)
+target/
+application-local.yml
+application-local.properties
+
+# Frontend (Next.js)
+node_modules/
+.next/
+/out/
+/build
+coverage/
+playwright-report/
+test-results/
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Variables de entorno (cualquier ubicación)
+.env*
+!**/.env.example

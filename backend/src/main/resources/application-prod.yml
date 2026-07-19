@@ -1,0 +1,45 @@
+# application-prod.yml — overrides para el perfil de producción (Railway)
+#
+# Activo cuando: SPRING_PROFILES_ACTIVE=prod (variable de entorno en Railway).
+#
+# TODAS las propiedades con valor real provienen de variables de entorno de
+# Railway. Este archivo NO contiene ningún valor sensible — solo referencias
+# a variables de entorno obligatorias (sin valor por defecto: si la variable
+# no está definida, la app falla al arrancar, que es el comportamiento deseado).
+#
+# Variables de entorno requeridas en Railway:
+#   DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+#   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+#   JWT_SECRET (mínimo 32 caracteres, generado con CSPRNG)
+#   FRONTEND_URL (dominio de Vercel, ej. https://easymarket.vercel.app)
+
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    show-sql: false   # Nunca loguear SQL en producción
+    hibernate:
+      ddl-auto: validate
+
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration-ms: 86400000   # 24 horas — sin refresh token (ver plan.md)
+
+  cors:
+    allowed-origins: ${FRONTEND_URL}
+
+# Deshabilitar Swagger UI en producción — exposición de la API no intencional
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
