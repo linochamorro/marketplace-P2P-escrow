@@ -28,24 +28,10 @@ marketplace-P2P-escrow/
 │   └── package.json
 │
 ├── docs/
-│   ├── avance/                 # Artifacts del ciclo implementador→verificador
-│   │   │                       # Nomenclatura: PHAxxTSKyy-Lzz-programmer.md / -tester.md
-│   │   └── ...
 │   └── stitch-screens/         # Referencia visual de UI generada con Google Stitch
 │                               # (no se usa como código — solo como guía de composición)
 │
-├── .agents/skills/             # Skills de Antigravity para este proyecto
-│   ├── developer-marketplace-escrow/SKILL.md
-│   └── tester-marketplace-escrow/SKILL.md
-│
-├── constitution.md             # Principios no negociables del proyecto
-├── spec.md                     # User stories con criterio de aceptación
-├── plan.md                     # Decisiones técnicas de arquitectura
-├── tasks.md                    # Roadmap de tareas con estado
-├── DESIGN.md                   # Sistema de diseño (tokens de paleta, tipografía, componentes)
-├── CHANGELOG.md                # Registro de tareas cerradas (append-only)
-├── AGENTS.md                   # Reglas de comportamiento para los agentes de IA
-└── docker-compose.yml          # PostgreSQL para desarrollo local
+├── docker-compose.yml          # PostgreSQL para desarrollo local
 ```
 
 ## Stack técnico
@@ -97,10 +83,3 @@ npm run dev
 stripe listen --forward-to http://localhost:8080/webhooks/stripe
 # Copiar el whsec_... impreso y asignarlo a STRIPE_WEBHOOK_SECRET
 ```
-
-## Metodología
-
-Este proyecto aplica **Spec-Driven Development** con un ciclo formal de dos
-roles de IA (implementador → verificador) para cada tarea del roadmap.
-Ver `tasks.md` para el estado actual del avance y `constitution.md` para
-los principios que rigen el proyecto.
