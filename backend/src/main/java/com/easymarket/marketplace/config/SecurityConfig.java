@@ -32,7 +32,6 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/health").permitAll()
-                .anyRequest().permitAll()
             );
 
         return http.build();
