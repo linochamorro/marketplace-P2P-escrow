@@ -5,6 +5,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
@@ -12,12 +14,22 @@ import org.springframework.security.web.SecurityFilterChain;
  *
  * <p>En PHA00, configura un {@link SecurityFilterChain} que permite el acceso
  * público sin autenticación al endpoint {@code /health} para la verificación de
- * despliegue (Railway). En fases posteriores (PHA01+) esta clase incorporará
- * filtros JWT y autenticación mediante cookie httpOnly.</p>
+ * despliegue (Railway). En PHA01 define el bean {@link PasswordEncoder} con
+ * {@link BCryptPasswordEncoder} (factor por defecto) según las decisiones de {@code plan.md}.</p>
  */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    /**
+     * Provee el codificador de contraseñas {@link PasswordEncoder} basado en BCrypt con factor por defecto.
+     *
+     * @return la instancia de {@link BCryptPasswordEncoder}
+     */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     /**
      * Configura las reglas de autorización y filtros de la cadena de seguridad HTTP.

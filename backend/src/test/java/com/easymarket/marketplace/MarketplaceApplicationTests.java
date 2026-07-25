@@ -1,10 +1,11 @@
 package com.easymarket.marketplace;
 
+import com.easymarket.marketplace.repository.LoginAttemptRepository;
+import com.easymarket.marketplace.repository.UsuarioRepository;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * Test de carga de contexto (smoke test) para {@link MarketplaceApplication}.
@@ -30,10 +31,17 @@ import org.springframework.test.context.TestPropertySource;
  *   <li>No valida configuración de seguridad JWT — responsabilidad de
  *       {@code PHA01TSK03}.</li>
  * </ul>
+ * </p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
 class MarketplaceApplicationTests {
+
+    @MockitoBean
+    private UsuarioRepository usuarioRepository;
+
+    @MockitoBean
+    private LoginAttemptRepository loginAttemptRepository;
 
     /**
      * Verifica que el contexto de aplicación arranca correctamente.
