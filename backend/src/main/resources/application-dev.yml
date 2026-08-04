@@ -14,6 +14,12 @@ spring:
     password: ${DB_PASSWORD:easymarket_dev_pass}
     driver-class-name: org.postgresql.Driver
 
+  flyway:
+    placeholders:
+      admin_email: ${ADMIN_EMAIL:admin@easymarket.com}
+      # Hash BCrypt de 'AdminPass123!' — SOLO para desarrollo local en Docker, jamás usar en producción
+      admin_password_hash: ${ADMIN_PASSWORD_HASH:$2a$10$R9h/cIPz0gi.URNNXRkh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW}
+
   jpa:
     show-sql: true          # SQL visible en consola solo en dev
     hibernate:

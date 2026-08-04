@@ -20,6 +20,11 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
+  flyway:
+    placeholders:
+      admin_email: ${ADMIN_EMAIL}
+      admin_password_hash: ${ADMIN_PASSWORD_HASH}
+
   jpa:
     show-sql: false   # Nunca loguear SQL en producción
     hibernate:

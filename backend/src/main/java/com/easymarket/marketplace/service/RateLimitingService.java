@@ -182,4 +182,18 @@ public class RateLimitingService {
     public void registrarExito(String email, String ip) {
         loginAttemptRepository.registrarExitoAtomic(email, ip);
     }
+
+    /**
+     * Resetea incondicionalmente el contador de intentos a cero y remueve la marca de bloqueo
+     * para una combinación email + IP de forma atómica, inclusive si la cuenta está en bloqueo permanente.
+     *
+     * <p>Este método es utilizado por los servicios administrativos de desbloqueo (PHA01TSK05).</p>
+     *
+     * @param email correo electrónico
+     * @param ip dirección IP de origen
+     */
+    @Transactional
+    public void desbloquearPermanente(String email, String ip) {
+        loginAttemptRepository.desbloquearPermanenteAtomic(email, ip);
+    }
 }

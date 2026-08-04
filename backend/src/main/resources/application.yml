@@ -38,6 +38,10 @@ spring:
     # Flyway falla al arrancar si detecta migraciones aplicadas que ya no
     # existen en el classpath — protección contra borrado accidental de scripts.
     validate-on-migrate: true
+    # Placeholders resueltos desde variables de entorno para el seed administrativo
+    placeholders:
+      admin_email: ${ADMIN_EMAIL}
+      admin_password_hash: ${ADMIN_PASSWORD_HASH}
 
   # ─── Jackson ────────────────────────────────────────────────────────────────
   # NOTA: las propiedades spring.jackson.serialization.* no son compatibles con

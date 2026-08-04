@@ -17,6 +17,14 @@ import java.util.Optional;
 public interface LoginAttemptRepository extends JpaRepository<LoginAttempt, Long> {
 
     /**
+     * Busca todos los registros de intentos de inicio de sesión asociados a un correo electrónico.
+     *
+     * @param email correo electrónico del usuario
+     * @return lista de registros de intentos de login
+     */
+    java.util.List<LoginAttempt> findByEmail(String email);
+
+    /**
      * Busca un registro de intentos de inicio de sesión por la combinación email y dirección IP.
      *
      * @param email correo electrónico del usuario
@@ -24,6 +32,7 @@ public interface LoginAttemptRepository extends JpaRepository<LoginAttempt, Long
      * @return un {@link Optional} con el registro de intentos si fue encontrado, o vacío en caso contrario
      */
     Optional<LoginAttempt> findByEmailAndIp(String email, String ip);
+
 
     /**
      * Realiza un upsert atómico para registrar un fallo de inicio de sesión.
@@ -73,4 +82,16 @@ public interface LoginAttemptRepository extends JpaRepository<LoginAttempt, Long
     @Modifying
     @Query("UPDATE LoginAttempt la SET la.intentos = 0, la.bloqueadoHasta = null WHERE la.email = :email AND la.ip = :ip AND la.intentos < 12")
     int registrarExitoAtomic(@Param("email") String email, @Param("ip") String ip);
+
+    /**
+     * Resetea incondicionalmente el contador de intentos a cero y remueve la marca de bloqueo
+     * para una combinación email + IP de forma atómica, inclusive si la cuenta está en bloqueo permanente.
+     *
+     * @param email correo electrónico
+     * @param ip dirección IP de origen
+     * @return número de filas modificadas
+     */
+    @Modifying
+    @Query("UPDATE LoginAttempt la SET la.intentos = 0, la.bloqueadoHasta = null WHERE la.email = :email AND la.ip = :ip")
+    int desbloquearPermanenteAtomic(@Param("email") String email, @Param("ip") String ip);
 }

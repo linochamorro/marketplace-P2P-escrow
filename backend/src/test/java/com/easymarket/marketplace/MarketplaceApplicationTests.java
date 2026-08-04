@@ -1,6 +1,9 @@
 package com.easymarket.marketplace;
 
+import com.easymarket.marketplace.repository.AdminAccionRepository;
+import com.easymarket.marketplace.repository.IdempotencyKeyRepository;
 import com.easymarket.marketplace.repository.LoginAttemptRepository;
+import com.easymarket.marketplace.repository.ProcessedStripeEventRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -42,6 +45,30 @@ class MarketplaceApplicationTests {
 
     @MockitoBean
     private LoginAttemptRepository loginAttemptRepository;
+
+    @MockitoBean
+    private AdminAccionRepository adminAccionRepository;
+
+    @MockitoBean
+    private com.easymarket.marketplace.repository.CategoriaRepository categoriaRepository;
+
+    @MockitoBean
+    private com.easymarket.marketplace.repository.SubcategoriaRepository subcategoriaRepository;
+
+    @MockitoBean
+    private com.easymarket.marketplace.repository.PublicacionCountRepository publicacionCountRepository;
+
+    @MockitoBean
+    private com.easymarket.marketplace.repository.PublicacionRepository publicacionRepository;
+
+    @MockitoBean
+    private com.easymarket.marketplace.repository.TransaccionRepository transaccionRepository;
+
+    @MockitoBean
+    private IdempotencyKeyRepository idempotencyKeyRepository;
+
+    @MockitoBean
+    private ProcessedStripeEventRepository processedStripeEventRepository;
 
     /**
      * Verifica que el contexto de aplicación arranca correctamente.
