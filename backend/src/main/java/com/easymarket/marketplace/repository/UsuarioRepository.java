@@ -2,6 +2,9 @@ package com.easymarket.marketplace.repository;
 
 import com.easymarket.marketplace.model.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -27,4 +30,18 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
      * @return un {@link Optional} conteniendo el usuario si fue encontrado, o vacío en caso contrario
      */
     Optional<Usuario> findByEmail(String email);
+
+    /**
+     * Incrementa atómicamente el saldo disponible cacheado de un vendedor en centavos.
+     *
+     * <p>La expresión de actualización se evalúa en PostgreSQL sobre el valor actual de la fila,
+     * por lo que créditos simultáneos de transacciones distintas no se pierden. El servicio que lo
+     * invoca también inserta el movimiento append-only dentro de su misma transacción.</p>
+     *
+     * @param vendedorId identificador del vendedor que recibe el crédito
+     * @param monto monto positivo en centavos a sumar
+     */
+    @Modifying
+    @Query("update Usuario u set u.saldoDisponible = u.saldoDisponible + :monto where u.id = :vendedorId")
+    void incrementarSaldoDisponible(@Param("vendedorId") Long vendedorId, @Param("monto") long monto);
 }

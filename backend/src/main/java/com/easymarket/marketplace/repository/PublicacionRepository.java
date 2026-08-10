@@ -71,4 +71,14 @@ public interface PublicacionRepository extends JpaRepository<Publicacion, Long> 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "UPDATE publicaciones SET stock = stock - 1 WHERE id = :publicacionId AND stock >= 1", nativeQuery = true)
     int decrementarStockSiDisponible(@Param("publicacionId") Long publicacionId);
+
+    /**
+     * Restaura exactamente una unidad de una publicación cuya reserva fue cancelada.
+     *
+     * @param publicacionId ID de la publicación a la que se devuelve la unidad reservada
+     * @return número de filas afectadas
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "UPDATE publicaciones SET stock = stock + 1 WHERE id = :publicacionId", nativeQuery = true)
+    int incrementarStock(@Param("publicacionId") Long publicacionId);
 }

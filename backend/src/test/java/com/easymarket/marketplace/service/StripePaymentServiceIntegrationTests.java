@@ -2,14 +2,12 @@ package com.easymarket.marketplace.service;
 
 import com.easymarket.marketplace.service.CrearPaymentIntentResult;
 import com.easymarket.marketplace.service.StripePaymentService;
+import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.TestPropertySource;
 
 import java.util.UUID;
 
@@ -30,12 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>Corresponde a PHA03TSK06 de {@code tasks.md}: test de integración (Stripe test mode)
  * que verifica que un PaymentIntent se crea con el monto correcto en centavos.</p>
  */
-@SpringBootTest
 @EnabledIfEnvironmentVariable(named = "STRIPE_SECRET_KEY", matches = "sk_test_.+")
 class StripePaymentServiceIntegrationTests {
-
-    @Autowired
-    private StripePaymentService stripePaymentService;
 
     /**
      * Verifica que un PaymentIntent se crea en Stripe sandbox con el monto correcto en
@@ -58,9 +52,11 @@ class StripePaymentServiceIntegrationTests {
     @Test
     @DisplayName("Debe crear PaymentIntent en Stripe sandbox con monto correcto en centavos")
     void crearPaymentIntent_CreaPaymentIntentConMontoCorrecto() throws StripeException {
+        Stripe.apiKey = System.getenv("STRIPE_SECRET_KEY");
         long montoCentavos = 299900L; // S/ 2,999.00
         String moneda = "pen";
         String idempotencyKey = UUID.randomUUID().toString();
+        StripePaymentService stripePaymentService = new StripePaymentService();
 
         CrearPaymentIntentResult resultado = stripePaymentService.crearPaymentIntent(
                 montoCentavos, moneda, idempotencyKey, 1L, 2L);

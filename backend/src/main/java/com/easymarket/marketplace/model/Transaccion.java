@@ -23,8 +23,9 @@ import java.util.Objects;
  * (plan.md, "Flujo de compra y reserva de stock (PHA03)"). El {@code precio_snapshot} se
  * almacena como entero en centavos (constitución, principio 3: dinero como enteros, nunca
  * punto flotante). Los timestamps {@code fecha_enviado} y {@code fecha_entregado} permanecen
- * nulos hasta que la transacción transiciona a {@code enviado}/{@code entregado}
- * (PHA04).</p>
+ * nulos hasta que la transacción transiciona a {@code enviado}/{@code entregado} (PHA04). La
+ * {@code descripcion_prueba_entrega} nullable guarda exclusivamente el texto opcional de la Story
+ * 6b al marcar entregado; no es el motivo de negocio de un evento de auditoría.</p>
  */
 @Entity
 @Table(name = "transacciones")
@@ -57,6 +58,12 @@ public class Transaccion {
 
     @Column(name = "fecha_entregado")
     private ZonedDateTime fechaEntregado;
+
+    @Column(name = "descripcion_prueba_entrega", columnDefinition = "TEXT")
+    private String descripcionPruebaEntrega;
+
+    @Column(name = "motivo_cancelacion", columnDefinition = "TEXT")
+    private String motivoCancelacion;
 
     /**
      * Constructor por defecto requerido por JPA.
@@ -225,6 +232,46 @@ public class Transaccion {
      */
     public void setFechaEntregado(ZonedDateTime fechaEntregado) {
         this.fechaEntregado = fechaEntregado;
+    }
+
+    /**
+     * Obtiene la descripción opcional de la prueba de entrega registrada por el vendedor.
+     *
+     * @return descripción de prueba de entrega, o {@code null} cuando el vendedor no la proveyó
+     */
+    public String getDescripcionPruebaEntrega() {
+        return descripcionPruebaEntrega;
+    }
+
+    /**
+     * Establece la descripción opcional de prueba de entrega de la Story 6b.
+     *
+     * <p>El valor {@code null} representa que el vendedor marcó la transacción como entregada sin
+     * proporcionar descripción; esta tarea no impone restricciones de longitud o contenido.</p>
+     *
+     * @param descripcionPruebaEntrega descripción de prueba de entrega, o {@code null} si no se
+     *                                  proveyó una
+     */
+    public void setDescripcionPruebaEntrega(String descripcionPruebaEntrega) {
+        this.descripcionPruebaEntrega = descripcionPruebaEntrega;
+    }
+
+    /**
+     * Obtiene el motivo obligatorio registrado cuando la transacción fue cancelada.
+     *
+     * @return motivo de cancelación, o {@code null} si aún no se canceló
+     */
+    public String getMotivoCancelacion() {
+        return motivoCancelacion;
+    }
+
+    /**
+     * Establece el motivo de una cancelación validada por el servicio de dominio.
+     *
+     * @param motivoCancelacion motivo obligatorio de la cancelación
+     */
+    public void setMotivoCancelacion(String motivoCancelacion) {
+        this.motivoCancelacion = motivoCancelacion;
     }
 
     /**

@@ -1,0 +1,436 @@
+package com.easymarket.marketplace.controller;
+
+import com.easymarket.marketplace.dto.LoginRequestDto;
+import com.easymarket.marketplace.model.Categoria;
+import com.easymarket.marketplace.model.EstadoTransaccion;
+import com.easymarket.marketplace.model.IdempotencyKey;
+import com.easymarket.marketplace.model.Publicacion;
+import com.easymarket.marketplace.model.Rol;
+import com.easymarket.marketplace.model.StripeRefundOutbox;
+import com.easymarket.marketplace.model.Subcategoria;
+import com.easymarket.marketplace.model.Transaccion;
+import com.easymarket.marketplace.model.Usuario;
+import com.easymarket.marketplace.repository.CategoriaRepository;
+import com.easymarket.marketplace.repository.IdempotencyKeyRepository;
+import com.easymarket.marketplace.repository.PublicacionRepository;
+import com.easymarket.marketplace.repository.StripeRefundOutboxRepository;
+import com.easymarket.marketplace.repository.SubcategoriaRepository;
+import com.easymarket.marketplace.repository.TransaccionEventoRepository;
+import com.easymarket.marketplace.repository.TransaccionRepository;
+import com.easymarket.marketplace.repository.UsuarioRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.Cookie;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.time.ZonedDateTime;
+import java.util.List;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Pruebas de integración del endpoint de cancelación de transacciones (PHA04TSK14, Story 7).
+ *
+ * <p>Usa PostgreSQL real mediante Testcontainers e identidades emitidas por el login JWT real;
+ * la cookie {@code jwt} obtenida por HTTP autentica cada petición. Verifica que el endpoint
+ * obtiene el actor exclusivamente del principal autenticado, exige el motivo obligatorio de
+ * Story 7, delega la lógica atómica en {@code CancelacionTransaccionService} y traduce
+ * correctamente sus excepciones de dominio. Cada caso verifica los efectos reales en base de
+ * datos (estado, motivo, stock, evento append-only y orden durable de reembolso), no solo el
+ * código HTTP.</p>
+ */
+@SpringBootTest
+@Testcontainers
+@TestPropertySource(properties = {
+    "spring.flyway.enabled=true",
+    "spring.flyway.locations=classpath:db/migration",
+    "spring.jpa.hibernate.ddl-auto=validate",
+    "app.jwt.secret=clave-secreta-pruebas-cancelar-transaccion-minimo-32-caracteres",
+    "ADMIN_EMAIL=admin.seed@easymarket.com",
+    "ADMIN_PASSWORD_HASH=$2a$10$R9h/cIPz0gi.URNNXRkh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW"
+})
+class TransaccionCancelarControllerIntegrationTests {
+
+    private static final String PASSWORD_RAW = "PasswordSeguro123!";
+    private static final long PRECIO_CENTAVOS = 125_000L;
+
+    @Container
+    @ServiceConnection
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+
+    @Autowired private WebApplicationContext webApplicationContext;
+    @Autowired private UsuarioRepository usuarioRepository;
+    @Autowired private CategoriaRepository categoriaRepository;
+    @Autowired private SubcategoriaRepository subcategoriaRepository;
+    @Autowired private PublicacionRepository publicacionRepository;
+    @Autowired private TransaccionRepository transaccionRepository;
+    @Autowired private TransaccionEventoRepository transaccionEventoRepository;
+    @Autowired private IdempotencyKeyRepository idempotencyKeyRepository;
+    @Autowired private StripeRefundOutboxRepository stripeRefundOutboxRepository;
+    @Autowired private PasswordEncoder passwordEncoder;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private MockMvc mockMvc;
+    private Usuario vendedor;
+    private Usuario comprador;
+    private Usuario tercero;
+    private Categoria categoria;
+    private Subcategoria subcategoria;
+
+    /** Configura identidades y catálogo aislados para cada escenario HTTP. */
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).apply(springSecurity()).build();
+        String sufijo = Long.toUnsignedString(System.nanoTime());
+        vendedor = guardarUsuario("vendedor.cancelar." + sufijo + "@easymarket.com");
+        comprador = guardarUsuario("comprador.cancelar." + sufijo + "@easymarket.com");
+        tercero = guardarUsuario("tercero.cancelar." + sufijo + "@easymarket.com");
+        categoria = categoriaRepository.save(new Categoria("Categoría " + sufijo));
+        subcategoria = subcategoriaRepository.save(new Subcategoria(categoria, "Subcategoría " + sufijo));
+    }
+
+    /**
+     * Verifica el criterio de aceptación 1 de Story 7: una {@code reservada} cancelada por el
+     * comprador retorna 200 y persiste atómicamente estado {@code CANCELADA}, motivo, stock
+     * restaurado, evento append-only con actor/origen/destino/motivo y orden durable de reembolso
+     * {@code PENDIENTE} con su correlación Stripe.
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("PATCH cancelar reservada por comprador retorna 200 y persiste efectos atómicos")
+    void cancelar_ReservadaPorComprador_Retorna200YPersisteEfectos() throws Exception {
+        Transaccion transaccion = guardarTransaccion(EstadoTransaccion.RESERVADA);
+        String paymentIntentId = vincularPaymentIntent(transaccion);
+        assertThat(publicacionRepository.findById(transaccion.getPublicacion().getId()).orElseThrow().getStock())
+                .isZero();
+
+        mockMvc.perform(patch("/transacciones/{id}/cancelar", transaccion.getId())
+                        .cookie(obtenerCookieJwtPostLogin(comprador))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"Cambio de planes\"}"))
+                .andExpect(status().isOk());
+
+        Transaccion actualizada = transaccionRepository.findById(transaccion.getId()).orElseThrow();
+        assertThat(actualizada.getEstado()).isEqualTo(EstadoTransaccion.CANCELADA);
+        assertThat(actualizada.getMotivoCancelacion()).isEqualTo("Cambio de planes");
+        assertThat(publicacionRepository.findById(transaccion.getPublicacion().getId()).orElseThrow().getStock())
+                .isEqualTo(1);
+        assertEvento(transaccion.getId(), comprador, EstadoTransaccion.RESERVADA, EstadoTransaccion.CANCELADA,
+                "Cambio de planes");
+        assertThat(stripeRefundOutboxRepository.findAll())
+                .filteredOn(orden -> orden.getTransaccion().getId().equals(transaccion.getId()))
+                .singleElement()
+                .satisfies(orden -> {
+                    assertThat(orden.getEstado()).isEqualTo("PENDIENTE");
+                    assertThat(orden.getIntentos()).isZero();
+                    assertThat(orden.getPaymentIntentId()).isEqualTo(paymentIntentId);
+                    assertThat(orden.getIdempotencyKey()).isEqualTo("refund:" + transaccion.getId());
+                });
+    }
+
+    /**
+     * Verifica el criterio de aceptación 1 de Story 7 para el envío: un {@code enviado} cancelado
+     * por el vendedor retorna 200 y persiste los mismos efectos atómicos con el vendedor como
+     * actor del evento.
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("PATCH cancelar enviado por vendedor retorna 200 y persiste efectos atómicos")
+    void cancelar_EnviadoPorVendedor_Retorna200YPersisteEfectos() throws Exception {
+        Transaccion transaccion = guardarTransaccion(EstadoTransaccion.ENVIADO);
+        String paymentIntentId = vincularPaymentIntent(transaccion);
+
+        mockMvc.perform(patch("/transacciones/{id}/cancelar", transaccion.getId())
+                        .cookie(obtenerCookieJwtPostLogin(vendedor))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"El comprador no respondió\"}"))
+                .andExpect(status().isOk());
+
+        Transaccion actualizada = transaccionRepository.findById(transaccion.getId()).orElseThrow();
+        assertThat(actualizada.getEstado()).isEqualTo(EstadoTransaccion.CANCELADA);
+        assertThat(actualizada.getMotivoCancelacion()).isEqualTo("El comprador no respondió");
+        assertThat(publicacionRepository.findById(transaccion.getPublicacion().getId()).orElseThrow().getStock())
+                .isEqualTo(1);
+        assertEvento(transaccion.getId(), vendedor, EstadoTransaccion.ENVIADO, EstadoTransaccion.CANCELADA,
+                "El comprador no respondió");
+        assertThat(stripeRefundOutboxRepository.findAll())
+                .filteredOn(orden -> orden.getTransaccion().getId().equals(transaccion.getId()))
+                .singleElement()
+                .satisfies(orden -> {
+                    assertThat(orden.getEstado()).isEqualTo("PENDIENTE");
+                    assertThat(orden.getIntentos()).isZero();
+                    assertThat(orden.getPaymentIntentId()).isEqualTo(paymentIntentId);
+                    assertThat(orden.getIdempotencyKey()).isEqualTo("refund:" + transaccion.getId());
+                });
+    }
+
+    /**
+     * Verifica el criterio de aceptación "motivo obligatorio, sin excepción": body ausente,
+     * {@code motivo: null}, {@code motivo: ""} y {@code motivo: "   "} retornan 400 sin ningún
+     * efecto en base de datos (estado intacto, sin evento, sin orden durable y stock sin
+     * restaurar).
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("PATCH cancelar con motivo ausente, null o blanco retorna 400 sin efectos")
+    void cancelar_MotivoAusenteONullOBlanco_Retorna400SinEfectos() throws Exception {
+        Transaccion sinBody = guardarTransaccion(EstadoTransaccion.RESERVADA);
+        vincularPaymentIntent(sinBody);
+        Transaccion campoNull = guardarTransaccion(EstadoTransaccion.RESERVADA);
+        vincularPaymentIntent(campoNull);
+        Transaccion vacio = guardarTransaccion(EstadoTransaccion.RESERVADA);
+        vincularPaymentIntent(vacio);
+        Transaccion soloBlancos = guardarTransaccion(EstadoTransaccion.RESERVADA);
+        vincularPaymentIntent(soloBlancos);
+        Cookie cookieComprador = obtenerCookieJwtPostLogin(comprador);
+
+        mockMvc.perform(patch("/transacciones/{id}/cancelar", sinBody.getId()).cookie(cookieComprador))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(patch("/transacciones/{id}/cancelar", campoNull.getId()).cookie(cookieComprador)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":null}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(patch("/transacciones/{id}/cancelar", vacio.getId()).cookie(cookieComprador)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(patch("/transacciones/{id}/cancelar", soloBlancos.getId()).cookie(cookieComprador)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+
+        for (Transaccion transaccion : List.of(sinBody, campoNull, vacio, soloBlancos)) {
+            assertSinEfectos(transaccion);
+        }
+    }
+
+    /**
+     * Verifica la autorización por estado de Story 7: el comprador no puede cancelar un envío
+     * (solo el vendedor) y un tercero ajeno a la transacción no puede cancelar una reserva;
+     * ambos escenarios retornan 403 sin efectos.
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("PATCH cancelar por actor no autorizado retorna 403 sin efectos")
+    void cancelar_ActorNoAutorizado_Retorna403SinEfectos() throws Exception {
+        Transaccion enviada = guardarTransaccion(EstadoTransaccion.ENVIADO);
+        vincularPaymentIntent(enviada);
+        Transaccion reservada = guardarTransaccion(EstadoTransaccion.RESERVADA);
+        vincularPaymentIntent(reservada);
+
+        mockMvc.perform(patch("/transacciones/{id}/cancelar", enviada.getId())
+                        .cookie(obtenerCookieJwtPostLogin(comprador))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"Prueba 403\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/transacciones/{id}/cancelar", reservada.getId())
+                        .cookie(obtenerCookieJwtPostLogin(tercero))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"Prueba 403\"}"))
+                .andExpect(status().isForbidden());
+
+        assertSinEfectos(enviada);
+        assertSinEfectos(reservada);
+    }
+
+    /**
+     * Verifica el rechazo de Story 7 para estados no cancelables: una transacción {@code entregado}
+     * cancelada retorna 409 sin efectos.
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("PATCH cancelar en estado entregado retorna 409 sin efectos")
+    void cancelar_EstadoEntregado_Retorna409SinEfectos() throws Exception {
+        Transaccion entregada = guardarTransaccion(EstadoTransaccion.ENTREGADO);
+        vincularPaymentIntent(entregada);
+
+        mockMvc.perform(patch("/transacciones/{id}/cancelar", entregada.getId())
+                        .cookie(obtenerCookieJwtPostLogin(comprador))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"Prueba 409\"}"))
+                .andExpect(status().isConflict());
+
+        assertSinEfectos(entregada);
+    }
+
+    /**
+     * Verifica que cancelar una transacción inexistente retorna 404 con el mensaje de dominio
+     * (delegación del mapeo existente de {@code TransaccionNoEncontradaException}).
+     *
+     * <p>El body con el mensaje se verifica para distinguir el 404 de dominio (endpoint presente,
+     * {@code GlobalExceptionHandler} actuando) del 404 de ruta inexistente del framework, que es
+     * el fallo de la fase Red cuando el endpoint aún no está implementado.</p>
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("PATCH cancelar transacción inexistente retorna 404 con mensaje de dominio")
+    void cancelar_TransaccionInexistente_Retorna404() throws Exception {
+        mockMvc.perform(patch("/transacciones/{id}/cancelar", 999_999L)
+                        .cookie(obtenerCookieJwtPostLogin(comprador))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"Prueba 404\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensaje").value("Transacción con ID 999999 no encontrada"));
+    }
+
+    /**
+     * Verifica la decisión del plan.md (2026-08-07): una transacción cancelable sin fila en
+     * {@code idempotency_keys} con {@code payment_intent_id} rechaza la cancelación con el código
+     * mapeado de {@code PaymentIntentTransaccionNoEncontradoException} antes de modificar estado,
+     * stock, auditoría u outbox.
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("PATCH cancelar sin PaymentIntent correlacionado retorna 409 sin efectos")
+    void cancelar_SinPaymentIntentVinculado_Retorna409SinEfectos() throws Exception {
+        Transaccion reservada = guardarTransaccion(EstadoTransaccion.RESERVADA);
+
+        mockMvc.perform(patch("/transacciones/{id}/cancelar", reservada.getId())
+                        .cookie(obtenerCookieJwtPostLogin(comprador))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"Sin correlación\"}"))
+                .andExpect(status().isConflict());
+
+        assertSinEfectos(reservada);
+    }
+
+    /**
+     * Persiste un usuario regular de prueba.
+     *
+     * @param email correo único del usuario
+     * @return usuario persistido
+     */
+    private Usuario guardarUsuario(String email) {
+        return usuarioRepository.save(new Usuario(email, passwordEncoder.encode(PASSWORD_RAW), Rol.USUARIO,
+                0L, ZonedDateTime.now()));
+    }
+
+    /**
+     * Crea una transacción de la publicación del vendedor para el comprador y fuerza el estado
+     * requerido por el caso.
+     *
+     * <p>La publicación se persiste directamente con stock 0, reproduciendo la condición física de
+     * una transacción ya reservada: el webhook {@code payment_intent.succeeded} consumió la única
+     * unidad al crear la reserva (inicial 1 &rarr; reserva consume &rarr; 0). La cancelación debe
+     * restaurarla a 1 vía {@code incrementarStock} del dominio.</p>
+     *
+     * @param estado estado inicial de la transacción
+     * @return transacción persistida con la publicación en stock 0 (reserva consumida)
+     */
+    private Transaccion guardarTransaccion(EstadoTransaccion estado) {
+        Publicacion publicacion = publicacionRepository.save(new Publicacion(vendedor, categoria, subcategoria,
+                PRECIO_CENTAVOS, 0, "Artículo de prueba"));
+        Transaccion transaccion = new Transaccion(comprador, publicacion, PRECIO_CENTAVOS, ZonedDateTime.now());
+        transaccion.setEstado(estado);
+        if (estado == EstadoTransaccion.ENVIADO) {
+            transaccion.setFechaEnviado(ZonedDateTime.now());
+        }
+        if (estado == EstadoTransaccion.ENTREGADO) {
+            transaccion.setFechaEntregado(ZonedDateTime.now());
+        }
+        return transaccionRepository.saveAndFlush(transaccion);
+    }
+
+    /**
+     * Crea y vincula la correlación Stripe exigida por el plan.md para cancelar: una fila en
+     * {@code idempotency_keys} con {@code transaccion_id} poblado y {@code payment_intent_id}
+     * no blanco (relación poblada en producción por el webhook {@code payment_intent.succeeded}).
+     *
+     * @param transaccion transacción cuya correlación se vincula
+     * @return {@code payment_intent_id} persistido para verificar la orden durable de reembolso
+     */
+    private String vincularPaymentIntent(Transaccion transaccion) {
+        String paymentIntentId = "pi_" + UUID.randomUUID();
+        IdempotencyKey key = new IdempotencyKey(UUID.randomUUID().toString(), paymentIntentId, ZonedDateTime.now());
+        key.setTransaccionId(transaccion.getId());
+        idempotencyKeyRepository.save(key);
+        return paymentIntentId;
+    }
+
+    /**
+     * Obtiene mediante el endpoint de login la cookie JWT del usuario indicado.
+     *
+     * @param usuario usuario cuyas credenciales se autentican
+     * @return cookie httpOnly {@code jwt} emitida por la aplicación
+     * @throws Exception si el login HTTP no se completa correctamente
+     */
+    private Cookie obtenerCookieJwtPostLogin(Usuario usuario) throws Exception {
+        MvcResult result = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequestDto(usuario.getEmail(), PASSWORD_RAW))))
+                .andExpect(status().isOk())
+                .andReturn();
+        Cookie cookie = result.getResponse().getCookie("jwt");
+        assertThat(cookie).isNotNull();
+        return cookie;
+    }
+
+    /**
+     * Comprueba el evento append-only generado para una cancelación exitosa.
+     *
+     * @param transaccionId ID de la transacción auditada
+     * @param actor usuario autenticado que realizó la cancelación
+     * @param origen estado de origen esperado
+     * @param destino estado de destino esperado
+     * @param motivo motivo obligatorio esperado
+     */
+    private void assertEvento(Long transaccionId, Usuario actor, EstadoTransaccion origen, EstadoTransaccion destino,
+                              String motivo) {
+        assertThat(transaccionEventoRepository.findAll())
+                .filteredOn(evento -> evento.getTransaccion().getId().equals(transaccionId))
+                .singleElement()
+                .satisfies(evento -> {
+                    assertThat(evento.getActor().getId()).isEqualTo(actor.getId());
+                    assertThat(evento.getEstadoOrigen()).isEqualTo(origen);
+                    assertThat(evento.getEstadoDestino()).isEqualTo(destino);
+                    assertThat(evento.getMotivo()).isEqualTo(motivo);
+                });
+    }
+
+    /**
+     * Verifica que un rechazo de cancelación no dejó ningún efecto persistente: estado y motivo
+     * intactos, stock sin restaurar (0), sin evento append-only y sin orden durable de reembolso.
+     *
+     * @param transaccion transacción cuyo estado previo se conserva íntegro
+     */
+    private void assertSinEfectos(Transaccion transaccion) {
+        Transaccion intacta = transaccionRepository.findById(transaccion.getId()).orElseThrow();
+        assertThat(intacta.getEstado()).isEqualTo(transaccion.getEstado());
+        assertThat(intacta.getMotivoCancelacion()).isNull();
+        assertThat(publicacionRepository.findById(transaccion.getPublicacion().getId()).orElseThrow().getStock())
+                .isZero();
+        assertThat(transaccionEventoRepository.findAll())
+                .filteredOn(evento -> evento.getTransaccion().getId().equals(transaccion.getId()))
+                .isEmpty();
+        assertThat(stripeRefundOutboxRepository.findAll())
+                .filteredOn(orden -> orden.getTransaccion().getId().equals(transaccion.getId()))
+                .isEmpty();
+    }
+}

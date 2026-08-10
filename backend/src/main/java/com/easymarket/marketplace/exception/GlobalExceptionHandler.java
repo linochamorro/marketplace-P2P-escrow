@@ -348,4 +348,179 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.BAD_REQUEST)
                 .body(Map.of("mensaje", ex.getMessage()));
     }
+
+    /**
+     * Maneja operaciones sobre transacciones cuyo identificador no existe.
+     *
+     * @param ex excepción de transacción inexistente
+     * @return {@link ResponseEntity} con código HTTP 404 Not Found
+     */
+    @ExceptionHandler(TransaccionNoEncontradaException.class)
+    public ResponseEntity<Map<String, String>> handleTransaccionNoEncontrada(TransaccionNoEncontradaException ex) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja intentos de transición de envío o entrega por alguien distinto del vendedor dueño.
+     *
+     * @param ex excepción de actor no autorizado para la transacción
+     * @return {@link ResponseEntity} con código HTTP 403 Forbidden
+     */
+    @ExceptionHandler(ActorNoEsVendedorTransaccionException.class)
+    public ResponseEntity<Map<String, String>> handleActorNoEsVendedorTransaccion(
+            ActorNoEsVendedorTransaccionException ex) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja intentos de confirmar o reclamar una transacción por un actor distinto de su comprador.
+     *
+     * @param ex excepción de comprador no autorizado
+     * @return {@link ResponseEntity} con código HTTP 403 Forbidden
+     */
+    @ExceptionHandler(ActorNoEsCompradorTransaccionException.class)
+    public ResponseEntity<Map<String, String>> handleActorNoEsCompradorTransaccion(
+            ActorNoEsCompradorTransaccionException ex) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja transiciones de una transacción que contradicen su máquina de estados.
+     *
+     * @param ex excepción de transición de transacción inválida
+     * @return {@link ResponseEntity} con código HTTP 409 Conflict
+     */
+    @ExceptionHandler(TransicionEstadoTransaccionInvalidaException.class)
+    public ResponseEntity<Map<String, String>> handleTransicionEstadoTransaccionInvalida(
+            TransicionEstadoTransaccionInvalidaException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja confirmaciones explícitas que excedieron la ventana de recepción de 48 horas.
+     *
+     * @param ex excepción de plazo de confirmación excedido
+     * @return {@link ResponseEntity} con código HTTP 409 Conflict
+     */
+    @ExceptionHandler(PlazoConfirmacionRecepcionExcedidoException.class)
+    public ResponseEntity<Map<String, String>> handlePlazoConfirmacionRecepcionExcedido(
+            PlazoConfirmacionRecepcionExcedidoException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja reclamos que excedieron la ventana de recepción de 48 horas.
+     *
+     * @param ex excepción de plazo de reclamo excedido
+     * @return {@link ResponseEntity} con código HTTP 409 Conflict
+     */
+    @ExceptionHandler(PlazoReclamoExcedidoException.class)
+    public ResponseEntity<Map<String, String>> handlePlazoReclamoExcedido(PlazoReclamoExcedidoException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja cancelaciones solicitadas sin el motivo obligatorio de Story 7.
+     *
+     * <p>Traduce la validación de dominio de {@code MotivoCancelacionObligatorioException} al
+     * criterio HTTP del task row de PHA04TSK14: "400 sin motivo". Cubre tanto el cuerpo ausente
+     * como {@code motivo} {@code null}, vacío o compuesto solo por blancos.</p>
+     *
+     * @param ex excepción de motivo de cancelación obligatorio
+     * @return {@link ResponseEntity} con código HTTP 400 Bad Request
+     */
+    @ExceptionHandler(MotivoCancelacionObligatorioException.class)
+    public ResponseEntity<Map<String, String>> handleMotivoCancelacionObligatorio(
+            MotivoCancelacionObligatorioException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja intentos de cancelación por un actor no autorizado según el estado origen (Story 7).
+     *
+     * <p>El comprador no puede cancelar un envío (solo el vendedor) y un tercero ajeno a la
+     * transacción no puede cancelar una reserva. Traduce la excepción de dominio al código 403
+     * convencional de autorización de la API.</p>
+     *
+     * @param ex excepción de actor no autorizado para cancelar
+     * @return {@link ResponseEntity} con código HTTP 403 Forbidden
+     */
+    @ExceptionHandler(ActorNoAutorizadoParaCancelarTransaccionException.class)
+    public ResponseEntity<Map<String, String>> handleActorNoAutorizadoParaCancelarTransaccion(
+            ActorNoAutorizadoParaCancelarTransaccionException ex) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja cancelaciones de transacciones sin correlación durable con su PaymentIntent.
+     *
+     * <p>Traduce la decisión del plan.md (2026-08-07): si una transacción cancelable no tiene una
+     * fila {@code idempotency_keys} con {@code payment_intent_id}, la cancelación se rechaza antes
+     * de modificar estado, stock, auditoría u outbox. El código 409 Conflict expresa que la
+     * operación no puede ejecutarse sobre el estado incompleto de la transacción, sin cambiar
+     * nada (consistente con el 409 ya usado para las transiciones de estado rechazadas).</p>
+     *
+     * @param ex excepción de correlación Stripe ausente
+     * @return {@link ResponseEntity} con código HTTP 409 Conflict
+     */
+    @ExceptionHandler(PaymentIntentTransaccionNoEncontradoException.class)
+    public ResponseEntity<Map<String, String>> handlePaymentIntentTransaccionNoEncontrado(
+            PaymentIntentTransaccionNoEncontradoException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja resoluciones de disputa sin una de las decisiones binarias de Story 9.
+     *
+     * <p>Traduce la validación de dominio de {@code DecisionResolucionDisputaInvalidaException} al
+     * criterio HTTP del task row de PHA04TSK15. Cubre tanto la decisión ausente o {@code null}
+     * (validada por el dominio) como la cadena que no pertenece al enum
+     * {@link com.easymarket.marketplace.model.ResolucionDisputa} (rechazada en el controlador).</p>
+     *
+     * @param ex excepción de decisión de resolución inválida
+     * @return {@link ResponseEntity} con código HTTP 400 Bad Request
+     */
+    @ExceptionHandler(DecisionResolucionDisputaInvalidaException.class)
+    public ResponseEntity<Map<String, String>> handleDecisionResolucionDisputaInvalida(
+            DecisionResolucionDisputaInvalidaException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja resoluciones de disputa solicitadas sin el motivo auditable de Story 9.
+     *
+     * <p>Traduce la validación de dominio de {@code MotivoResolucionDisputaObligatorioException} al
+     * criterio HTTP del task row de PHA04TSK15: "400 sin motivo". Cubre tanto el cuerpo ausente
+     * como {@code motivo} {@code null}, vacío o compuesto solo por blancos.</p>
+     *
+     * @param ex excepción de motivo de resolución obligatorio
+     * @return {@link ResponseEntity} con código HTTP 400 Bad Request
+     */
+    @ExceptionHandler(MotivoResolucionDisputaObligatorioException.class)
+    public ResponseEntity<Map<String, String>> handleMotivoResolucionDisputaObligatorio(
+            MotivoResolucionDisputaObligatorioException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
 }

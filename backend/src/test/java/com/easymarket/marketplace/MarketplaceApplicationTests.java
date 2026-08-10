@@ -3,8 +3,13 @@ package com.easymarket.marketplace;
 import com.easymarket.marketplace.repository.AdminAccionRepository;
 import com.easymarket.marketplace.repository.IdempotencyKeyRepository;
 import com.easymarket.marketplace.repository.LoginAttemptRepository;
+import com.easymarket.marketplace.repository.MovimientoSaldoRepository;
+import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.ProcessedStripeEventRepository;
+import com.easymarket.marketplace.repository.StripeRefundOutboxRepository;
+import com.easymarket.marketplace.repository.TransaccionEventoRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
+import com.easymarket.marketplace.repository.AvisoEnvioPendienteRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -65,10 +70,27 @@ class MarketplaceApplicationTests {
     private com.easymarket.marketplace.repository.TransaccionRepository transaccionRepository;
 
     @MockitoBean
+    private TransaccionEventoRepository transaccionEventoRepository;
+
+    @MockitoBean
+    private MovimientoSaldoRepository movimientoSaldoRepository;
+
+    @MockitoBean
     private IdempotencyKeyRepository idempotencyKeyRepository;
 
     @MockitoBean
     private ProcessedStripeEventRepository processedStripeEventRepository;
+
+    @MockitoBean
+    private StripeRefundOutboxRepository stripeRefundOutboxRepository;
+
+    /** Mock required by the pending-shipment notification job added in PHA04TSK08. */
+    @MockitoBean
+    private NotificacionRepository notificacionRepository;
+
+    /** Mock required by the V13 idempotency marker dependency of the PHA04TSK08 job. */
+    @MockitoBean
+    private AvisoEnvioPendienteRepository avisoEnvioPendienteRepository;
 
     /**
      * Verifica que el contexto de aplicación arranca correctamente.

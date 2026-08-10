@@ -34,4 +34,12 @@ public interface IdempotencyKeyRepository extends JpaRepository<IdempotencyKey, 
      * @return un {@link Optional} conteniendo la entidad si existe, o vacío si no
      */
     Optional<IdempotencyKey> findByPaymentIntentId(String paymentIntentId);
+
+    /**
+     * Busca la correlación de compra que el webhook vinculó a una transacción ya creada.
+     *
+     * @param transaccionId ID de la transacción cuya correlación Stripe se necesita
+     * @return clave de idempotencia con PaymentIntent, o vacío si no existe
+     */
+    Optional<IdempotencyKey> findByTransaccionId(Long transaccionId);
 }
