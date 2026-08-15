@@ -6,6 +6,8 @@ import com.easymarket.marketplace.model.EstadoPublicacion;
 import com.easymarket.marketplace.model.Publicacion;
 import com.easymarket.marketplace.model.Rol;
 import com.easymarket.marketplace.security.UsuarioPrincipal;
+import com.easymarket.marketplace.service.ListadoPublicacionesService;
+import com.easymarket.marketplace.service.OrdenListadoPublicaciones;
 import com.easymarket.marketplace.service.PublicacionService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -33,17 +35,21 @@ public class PublicacionController {
 
     private final PublicacionService publicacionService;
     private final com.easymarket.marketplace.repository.AdminAccionRepository adminAccionRepository;
+    private final ListadoPublicacionesService listadoPublicacionesService;
 
     /**
-     * Construye el controlador inyectando el servicio de publicaciones y el repositorio de auditoría de admin.
+     * Construye el controlador inyectando los servicios de publicación y listado, y el repositorio de auditoría de admin.
      *
      * @param publicacionService servicio de dominio para publicaciones
      * @param adminAccionRepository repositorio JPA de acciones administrativas
+     * @param listadoPublicacionesService servicio de lectura filtrada de publicaciones aprobadas
      */
     public PublicacionController(PublicacionService publicacionService,
-                                 com.easymarket.marketplace.repository.AdminAccionRepository adminAccionRepository) {
+                                  com.easymarket.marketplace.repository.AdminAccionRepository adminAccionRepository,
+                                  ListadoPublicacionesService listadoPublicacionesService) {
         this.publicacionService = publicacionService;
         this.adminAccionRepository = adminAccionRepository;
+        this.listadoPublicacionesService = listadoPublicacionesService;
     }
 
     /**
@@ -151,7 +157,7 @@ public class PublicacionController {
      * @return {@link ResponseEntity} con código HTTP 200 OK y lista de DTOs de publicaciones en ese estado
      * @throws AccessDeniedException si el estado es {@code PENDIENTE_REVISION} y el usuario no es {@code ADMIN}
      */
-    @GetMapping
+    @GetMapping(params = "estado")
     public ResponseEntity<List<PublicacionResponseDto>> listarPorEstado(
             @RequestParam("estado") EstadoPublicacion estado,
             @AuthenticationPrincipal UsuarioPrincipal principal
@@ -161,6 +167,37 @@ public class PublicacionController {
         }
 
         List<PublicacionResponseDto> resultado = publicacionService.listarPorEstado(estado)
+                .stream()
+                .map(PublicacionResponseDto::fromEntity)
+                .toList();
+        return ResponseEntity.ok(resultado);
+    }
+
+    /**
+     * Endpoint REST {@code GET /publicaciones} para descubrir publicaciones aprobadas de Story 11.
+     *
+     * <p>Todos los parámetros son opcionales y se delegan sin transformación semántica al contrato
+     * nullable de {@link ListadoPublicacionesService#listar(Long, Long, Long, Long,
+     * OrdenListadoPublicaciones)}. La condición {@code !estado} reserva las solicitudes que incluyen
+     * {@code estado} para el endpoint histórico de Story 2 y evita ambigüedad entre mappings.</p>
+     *
+     * @param categoriaId identificador opcional de categoría
+     * @param subcategoriaId identificador opcional de subcategoría
+     * @param precioMinimo límite inferior inclusivo opcional en centavos enteros
+     * @param precioMaximo límite superior inclusivo opcional en centavos enteros
+     * @param orden orden explícito opcional del listado
+     * @return {@link ResponseEntity} con código HTTP 200 OK y DTOs de publicaciones aprobadas filtradas
+     */
+    @GetMapping(params = "!estado")
+    public ResponseEntity<List<PublicacionResponseDto>> listarPublicaciones(
+            @RequestParam(required = false) Long categoriaId,
+            @RequestParam(required = false) Long subcategoriaId,
+            @RequestParam(required = false) Long precioMinimo,
+            @RequestParam(required = false) Long precioMaximo,
+            @RequestParam(required = false) OrdenListadoPublicaciones orden
+    ) {
+        List<PublicacionResponseDto> resultado = listadoPublicacionesService
+                .listar(categoriaId, subcategoriaId, precioMinimo, precioMaximo, orden)
                 .stream()
                 .map(PublicacionResponseDto::fromEntity)
                 .toList();

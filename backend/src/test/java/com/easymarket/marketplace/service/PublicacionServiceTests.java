@@ -4,7 +4,9 @@ import com.easymarket.marketplace.exception.CategoriaNoEncontradaException;
 import com.easymarket.marketplace.exception.CategoriaPublicacionInmutableException;
 import com.easymarket.marketplace.exception.EstadoPublicacionNoEditableException;
 import com.easymarket.marketplace.exception.MotivoRequeridoException;
+import com.easymarket.marketplace.exception.NoEsElPropietarioException;
 import com.easymarket.marketplace.exception.PrecioInvalidoException;
+import com.easymarket.marketplace.exception.PublicacionNoEliminableException;
 import com.easymarket.marketplace.exception.PublicacionNoEncontradaException;
 import com.easymarket.marketplace.exception.StockInvalidoException;
 import com.easymarket.marketplace.exception.SubcategoriaNoPerteneceACategoriaException;
@@ -13,16 +15,20 @@ import com.easymarket.marketplace.exception.UsuarioNoEncontradoException;
 import com.easymarket.marketplace.model.Categoria;
 import com.easymarket.marketplace.model.EstadoPublicacion;
 import com.easymarket.marketplace.model.Publicacion;
+import com.easymarket.marketplace.model.PublicacionEvento;
 import com.easymarket.marketplace.model.Rol;
 import com.easymarket.marketplace.model.Subcategoria;
 import com.easymarket.marketplace.model.Usuario;
 import com.easymarket.marketplace.repository.CategoriaRepository;
 import com.easymarket.marketplace.repository.PublicacionRepository;
+import com.easymarket.marketplace.repository.PublicacionEventoRepository;
+import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.SubcategoriaRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -52,6 +58,10 @@ import static org.mockito.Mockito.when;
  *   <li>Edición de publicación aprobada (Story 3): actualización de precio, stock (≥0) y descripción.</li>
  *   <li>Bloqueo de modificación de categoría/subcategoría en publicación aprobada con {@link CategoriaPublicacionInmutableException}.</li>
  *   <li>Rechazo de edición en estados distintos a 'APROBADA' con {@link EstadoPublicacionNoEditableException}.</li>
+ *   <li>Corrección de categoría/subcategoría desde 'CAMBIOS_SOLICITADOS' o 'RECHAZADA' con reenvío a 'PENDIENTE_REVISION' (Story 3).</li>
+ *   <li>Rechazo de corrección en 'APROBADA' con {@link CategoriaPublicacionInmutableException} y en estados no corregibles con {@link TransicionEstadoInvalidaException}.</li>
+ *   <li>Eliminación definitiva exclusiva de publicaciones 'RECHAZADA' con {@link com.easymarket.marketplace.exception.PublicacionNoEliminableException} para el resto.</li>
+ *   <li>Validación de propiedad ({@link NoEsElPropietarioException}) en corrección y eliminación.</li>
  * </ul>
  * </p>
  */
@@ -70,6 +80,12 @@ class PublicacionServiceTests {
     @Mock
     private SubcategoriaRepository subcategoriaRepository;
 
+    @Mock
+    private PublicacionEventoRepository publicacionEventoRepository;
+
+    @Mock
+    private NotificacionRepository notificacionRepository;
+
     @InjectMocks
     private PublicacionService publicacionService;
 
@@ -81,6 +97,8 @@ class PublicacionServiceTests {
     void crearPublicacion_DatosValidos_CreaPublicacionConEstadoPendienteRevision() {
         Usuario usuario = new Usuario("vendedor@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
         usuario.setId(1L);
+        Usuario admin = new Usuario("admin@example.com", "hash", Rol.ADMIN, 0L, ZonedDateTime.now());
+        admin.setId(2L);
 
         Categoria categoria = new Categoria("Electrónica");
         categoria.setId(10L);
@@ -89,6 +107,7 @@ class PublicacionServiceTests {
         subcategoria.setId(100L);
 
         when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.findByRol(Rol.ADMIN)).thenReturn(Optional.of(admin));
         when(categoriaRepository.findById(10L)).thenReturn(Optional.of(categoria));
         when(subcategoriaRepository.findById(100L)).thenReturn(Optional.of(subcategoria));
 
@@ -109,6 +128,46 @@ class PublicacionServiceTests {
         assertThat(resultado.getStock()).isEqualTo(5);
 
         verify(publicacionRepository).save(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que la creación válida persista los tres efectos de Story 1: publicación pendiente,
+     * evento canónico CREADA y aviso in-app para la única cuenta ADMIN.
+     */
+    @Test
+    @DisplayName("Debe guardar publicación, evento CREADA y aviso literal para el ADMIN al crear una publicación")
+    void crearPublicacion_DatosValidos_GuardaPublicacionEventoYNotificacionAdmin() {
+        Usuario vendedor = new Usuario("vendedor-auditoria@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        vendedor.setId(1L);
+        Usuario admin = new Usuario("admin-auditoria@example.com", "hash", Rol.ADMIN, 0L, ZonedDateTime.now());
+        admin.setId(2L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+        Publicacion publicacionGuardada = new Publicacion(vendedor, categoria, subcategoria, 150000L, 5, "Laptop Core i7");
+        publicacionGuardada.setId(500L);
+
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(vendedor));
+        when(usuarioRepository.findByRol(Rol.ADMIN)).thenReturn(Optional.of(admin));
+        when(categoriaRepository.findById(10L)).thenReturn(Optional.of(categoria));
+        when(subcategoriaRepository.findById(100L)).thenReturn(Optional.of(subcategoria));
+        when(publicacionRepository.save(any(Publicacion.class))).thenReturn(publicacionGuardada);
+
+        Publicacion resultado = publicacionService.crearPublicacion(1L, 10L, 100L, 150000L, 5, "Laptop Core i7");
+
+        assertThat(resultado).isSameAs(publicacionGuardada);
+        org.mockito.ArgumentCaptor<PublicacionEvento> eventoCaptor = org.mockito.ArgumentCaptor.forClass(PublicacionEvento.class);
+        verify(publicacionEventoRepository).save(eventoCaptor.capture());
+        assertThat(eventoCaptor.getValue().getPublicacion()).isSameAs(publicacionGuardada);
+        assertThat(eventoCaptor.getValue().getActor()).isSameAs(vendedor);
+        assertThat(eventoCaptor.getValue().getTipo()).isEqualTo("CREADA");
+        org.mockito.ArgumentCaptor<com.easymarket.marketplace.model.Notificacion> avisoCaptor =
+            org.mockito.ArgumentCaptor.forClass(com.easymarket.marketplace.model.Notificacion.class);
+        verify(notificacionRepository).save(avisoCaptor.capture());
+        assertThat(avisoCaptor.getValue().getUsuario()).isSameAs(admin);
+        assertThat(avisoCaptor.getValue().getTipo()).isEqualTo("NUEVA_PUBLICACION_PENDIENTE");
+        assertThat(avisoCaptor.getValue().getMensaje()).isEqualTo("Nueva publicación pendiente de revisión: #500");
     }
 
     /**
@@ -685,6 +744,422 @@ class PublicacionServiceTests {
         assertThat(resultado.getEstado()).isEqualTo(EstadoPublicacion.APROBADA);
         verify(publicacionRepository).save(p);
     }
+
+    /**
+     * Verifica que corregir la categoría/subcategoría desde CAMBIOS_SOLICITADOS reenvíe la publicación
+     * a PENDIENTE_REVISION y persista los nuevos valores campo a campo (Story 3, spec.md).
+     */
+    @Test
+    @DisplayName("Debe corregir categoría/subcategoría desde CAMBIOS_SOLICITADOS y reenviar a PENDIENTE_REVISION")
+    void corregirPublicacion_DesdeCambiosSolicitados_CorrigeCategoriaYReenviaAPendienteRevision() {
+        Usuario duenio = new Usuario("vendedor@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+
+        Categoria categoriaOriginal = new Categoria("Electrónica");
+        categoriaOriginal.setId(10L);
+        Subcategoria subcategoriaOriginal = new Subcategoria(categoriaOriginal, "Laptops");
+        subcategoriaOriginal.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoriaOriginal, subcategoriaOriginal, 150000L, 5, "Laptop Core i7");
+        publicacion.setId(50L);
+        publicacion.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
+
+        Categoria categoriaCorregida = new Categoria("Hogar");
+        categoriaCorregida.setId(20L);
+        Subcategoria subcategoriaCorregida = new Subcategoria(categoriaCorregida, "Muebles");
+        subcategoriaCorregida.setId(200L);
+
+        when(publicacionRepository.findById(50L)).thenReturn(Optional.of(publicacion));
+        when(categoriaRepository.findById(20L)).thenReturn(Optional.of(categoriaCorregida));
+        when(subcategoriaRepository.findById(200L)).thenReturn(Optional.of(subcategoriaCorregida));
+        when(publicacionRepository.save(any(Publicacion.class))).thenAnswer(i -> i.getArgument(0));
+
+        Publicacion resultado = publicacionService.corregirPublicacion(50L, 1L, 20L, 200L);
+
+        assertThat(resultado.getEstado()).isEqualTo(EstadoPublicacion.PENDIENTE_REVISION);
+
+        ArgumentCaptor<Publicacion> captor = ArgumentCaptor.forClass(Publicacion.class);
+        verify(publicacionRepository).save(captor.capture());
+        Publicacion persistida = captor.getValue();
+        assertThat(persistida.getId()).isEqualTo(50L);
+        assertThat(persistida.getEstado()).isEqualTo(EstadoPublicacion.PENDIENTE_REVISION);
+        assertThat(persistida.getCategoria()).isSameAs(categoriaCorregida);
+        assertThat(persistida.getSubcategoria()).isSameAs(subcategoriaCorregida);
+        assertThat(persistida.getPrecio()).isEqualTo(150000L);
+        assertThat(persistida.getStock()).isEqualTo(5);
+    }
+
+    /**
+     * Verifica que corregir la categoría/subcategoría desde RECHAZADA reenvíe la publicación a
+     * PENDIENTE_REVISION (Story 3, spec.md: editar una rechazada la reenvía a revisión).
+     */
+    @Test
+    @DisplayName("Debe corregir categoría/subcategoría desde RECHAZADA y reenviar a PENDIENTE_REVISION")
+    void corregirPublicacion_DesdeRechazada_CorrigeCategoriaYReenviaAPendienteRevision() {
+        Usuario duenio = new Usuario("vendedor-rechazada@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+
+        Categoria categoriaOriginal = new Categoria("Electrónica");
+        categoriaOriginal.setId(10L);
+        Subcategoria subcategoriaOriginal = new Subcategoria(categoriaOriginal, "Laptops");
+        subcategoriaOriginal.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoriaOriginal, subcategoriaOriginal, 150000L, 5, "Laptop");
+        publicacion.setId(50L);
+        publicacion.setEstado(EstadoPublicacion.RECHAZADA);
+
+        Categoria categoriaCorregida = new Categoria("Hogar");
+        categoriaCorregida.setId(20L);
+        Subcategoria subcategoriaCorregida = new Subcategoria(categoriaCorregida, "Muebles");
+        subcategoriaCorregida.setId(200L);
+
+        when(publicacionRepository.findById(50L)).thenReturn(Optional.of(publicacion));
+        when(categoriaRepository.findById(20L)).thenReturn(Optional.of(categoriaCorregida));
+        when(subcategoriaRepository.findById(200L)).thenReturn(Optional.of(subcategoriaCorregida));
+        when(publicacionRepository.save(any(Publicacion.class))).thenAnswer(i -> i.getArgument(0));
+
+        Publicacion resultado = publicacionService.corregirPublicacion(50L, 1L, 20L, 200L);
+
+        assertThat(resultado.getEstado()).isEqualTo(EstadoPublicacion.PENDIENTE_REVISION);
+        assertThat(resultado.getCategoria()).isSameAs(categoriaCorregida);
+        assertThat(resultado.getSubcategoria()).isSameAs(subcategoriaCorregida);
+        verify(publicacionRepository).save(publicacion);
+    }
+
+    /**
+     * Verifica que corregir la categoría/subcategoría de una publicación APROBADA sea rechazado
+     * (Story 3, spec.md: en aprobada la categoría/subcategoría queda bloqueada).
+     */
+    @Test
+    @DisplayName("Debe lanzar CategoriaPublicacionInmutableException al corregir categoría desde APROBADA")
+    void corregirPublicacion_DesdeAprobada_LanzaCategoriaPublicacionInmutableException() {
+        Usuario duenio = new Usuario("vendedor-aprobada@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(51L);
+        publicacion.setEstado(EstadoPublicacion.APROBADA);
+
+        when(publicacionRepository.findById(51L)).thenReturn(Optional.of(publicacion));
+
+        assertThatThrownBy(() -> publicacionService.corregirPublicacion(51L, 1L, 20L, 200L))
+            .isInstanceOf(CategoriaPublicacionInmutableException.class)
+            .hasMessageContaining("No se permite modificar la categoría o subcategoría");
+
+        verify(publicacionRepository, never()).save(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que corregir desde PENDIENTE_REVISION sea rechazado: la publicación está en tránsito
+     * de moderación y no admite corrección de categoría/subcategoría (defensivo, Story 3).
+     */
+    @Test
+    @DisplayName("Debe lanzar TransicionEstadoInvalidaException al corregir desde PENDIENTE_REVISION")
+    void corregirPublicacion_DesdePendienteRevision_LanzaTransicionEstadoInvalidaException() {
+        Usuario duenio = new Usuario("vendedor-pendiente@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(52L);
+        publicacion.setEstado(EstadoPublicacion.PENDIENTE_REVISION);
+
+        when(publicacionRepository.findById(52L)).thenReturn(Optional.of(publicacion));
+
+        assertThatThrownBy(() -> publicacionService.corregirPublicacion(52L, 1L, 20L, 200L))
+            .isInstanceOf(TransicionEstadoInvalidaException.class)
+            .hasMessageContaining("Transición de estado no permitida");
+
+        verify(publicacionRepository, never()).save(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que corregir desde OCULTA sea rechazado (defensivo; la publicación oculta no está en
+     * tránsito de moderación y no admite reenvío a revisión).
+     */
+    @Test
+    @DisplayName("Debe lanzar TransicionEstadoInvalidaException al corregir desde OCULTA")
+    void corregirPublicacion_DesdeOculta_LanzaTransicionEstadoInvalidaException() {
+        Usuario duenio = new Usuario("vendedor-oculta@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(53L);
+        publicacion.setEstado(EstadoPublicacion.OCULTA);
+
+        when(publicacionRepository.findById(53L)).thenReturn(Optional.of(publicacion));
+
+        assertThatThrownBy(() -> publicacionService.corregirPublicacion(53L, 1L, 20L, 200L))
+            .isInstanceOf(TransicionEstadoInvalidaException.class)
+            .hasMessageContaining("Transición de estado no permitida");
+
+        verify(publicacionRepository, never()).save(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que corregir una publicación ajena lance NoEsElPropietarioException (Story 3: solo el
+     * vendedor dueño corrige su publicación).
+     */
+    @Test
+    @DisplayName("Debe lanzar NoEsElPropietarioException al corregir una publicación que no es del usuario")
+    void corregirPublicacion_NoPropietario_LanzaNoEsElPropietarioException() {
+        Usuario duenio = new Usuario("vendedor-duenio@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(54L);
+        publicacion.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
+
+        when(publicacionRepository.findById(54L)).thenReturn(Optional.of(publicacion));
+
+        assertThatThrownBy(() -> publicacionService.corregirPublicacion(54L, 999L, 20L, 200L))
+            .isInstanceOf(NoEsElPropietarioException.class)
+            .hasMessageContaining("no es el propietario");
+
+        verify(publicacionRepository, never()).save(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que corregir con una categoría inexistente lance CategoriaNoEncontradaException
+     * (misma validación de existencia que crearPublicacion, Stories 1 y 3).
+     */
+    @Test
+    @DisplayName("Debe lanzar CategoriaNoEncontradaException al corregir con categoría inexistente")
+    void corregirPublicacion_CategoriaInexistente_LanzaCategoriaNoEncontradaException() {
+        Usuario duenio = new Usuario("vendedor-cat@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(55L);
+        publicacion.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
+
+        when(publicacionRepository.findById(55L)).thenReturn(Optional.of(publicacion));
+        when(categoriaRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> publicacionService.corregirPublicacion(55L, 1L, 999L, 200L))
+            .isInstanceOf(CategoriaNoEncontradaException.class)
+            .hasMessageContaining("Categoría raíz con ID 999 no encontrada");
+
+        verify(publicacionRepository, never()).save(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que corregir con una subcategoría inexistente lance CategoriaNoEncontradaException
+     * (misma validación de existencia que crearPublicacion).
+     */
+    @Test
+    @DisplayName("Debe lanzar CategoriaNoEncontradaException al corregir con subcategoría inexistente")
+    void corregirPublicacion_SubcategoriaInexistente_LanzaCategoriaNoEncontradaException() {
+        Usuario duenio = new Usuario("vendedor-subcat@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(56L);
+        publicacion.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
+
+        Categoria categoriaCorregida = new Categoria("Hogar");
+        categoriaCorregida.setId(20L);
+
+        when(publicacionRepository.findById(56L)).thenReturn(Optional.of(publicacion));
+        when(categoriaRepository.findById(20L)).thenReturn(Optional.of(categoriaCorregida));
+        when(subcategoriaRepository.findById(888L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> publicacionService.corregirPublicacion(56L, 1L, 20L, 888L))
+            .isInstanceOf(CategoriaNoEncontradaException.class)
+            .hasMessageContaining("Subcategoría con ID 888 no encontrada");
+
+        verify(publicacionRepository, never()).save(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que corregir con una subcategoría que pertenece a otra categoría lance
+     * SubcategoriaNoPerteneceACategoriaException (misma validación padre-hijo que crearPublicacion).
+     */
+    @Test
+    @DisplayName("Debe lanzar SubcategoriaNoPerteneceACategoriaException al corregir con subcategoría de otra categoría")
+    void corregirPublicacion_SubcategoriaNoPerteneceACategoria_LanzaSubcategoriaNoPerteneceACategoriaException() {
+        Usuario duenio = new Usuario("vendedor-padre@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(57L);
+        publicacion.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
+
+        Categoria categoriaCorregida = new Categoria("Hogar");
+        categoriaCorregida.setId(20L);
+        Categoria otraCategoria = new Categoria("Ropa");
+        otraCategoria.setId(30L);
+        // Subcategoría "Camisas" pertenece a Ropa (30L), pero se intenta asociar con Hogar (20L)
+        Subcategoria subcategoriaRopa = new Subcategoria(otraCategoria, "Camisas");
+        subcategoriaRopa.setId(300L);
+
+        when(publicacionRepository.findById(57L)).thenReturn(Optional.of(publicacion));
+        when(categoriaRepository.findById(20L)).thenReturn(Optional.of(categoriaCorregida));
+        when(subcategoriaRepository.findById(300L)).thenReturn(Optional.of(subcategoriaRopa));
+
+        assertThatThrownBy(() -> publicacionService.corregirPublicacion(57L, 1L, 20L, 300L))
+            .isInstanceOf(SubcategoriaNoPerteneceACategoriaException.class)
+            .hasMessageContaining("no pertenece a la categoría con ID 20");
+
+        verify(publicacionRepository, never()).save(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que la corrección válida no persista evento ni notificación nuevos: el log append-only
+     * publicacion_eventos solo admite el tipo CREADA y la corrección no genera avisos (constitución,
+     * principio 2; límite de alcance de PHA06TSK03).
+     */
+    @Test
+    @DisplayName("Debe corregir sin persistir eventos ni notificaciones nuevas")
+    void corregirPublicacion_Valida_NoPersisteEventoNiNotificacionNuevos() {
+        Usuario duenio = new Usuario("vendedor-sinaviso@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoriaOriginal = new Categoria("Electrónica");
+        categoriaOriginal.setId(10L);
+        Subcategoria subcategoriaOriginal = new Subcategoria(categoriaOriginal, "Laptops");
+        subcategoriaOriginal.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoriaOriginal, subcategoriaOriginal, 150000L, 5, "Laptop");
+        publicacion.setId(58L);
+        publicacion.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
+
+        Categoria categoriaCorregida = new Categoria("Hogar");
+        categoriaCorregida.setId(20L);
+        Subcategoria subcategoriaCorregida = new Subcategoria(categoriaCorregida, "Muebles");
+        subcategoriaCorregida.setId(200L);
+
+        when(publicacionRepository.findById(58L)).thenReturn(Optional.of(publicacion));
+        when(categoriaRepository.findById(20L)).thenReturn(Optional.of(categoriaCorregida));
+        when(subcategoriaRepository.findById(200L)).thenReturn(Optional.of(subcategoriaCorregida));
+        when(publicacionRepository.save(any(Publicacion.class))).thenAnswer(i -> i.getArgument(0));
+
+        Publicacion resultado = publicacionService.corregirPublicacion(58L, 1L, 20L, 200L);
+
+        assertThat(resultado.getEstado()).isEqualTo(EstadoPublicacion.PENDIENTE_REVISION);
+        verify(publicacionEventoRepository, never()).save(any());
+        verify(notificacionRepository, never()).save(any());
+    }
+
+    /**
+     * Verifica que el dueño pueda eliminar definitivamente una publicación RECHAZADA y que el
+     * repositorio reciba exactamente esa entidad (Story 3, spec.md).
+     */
+    @Test
+    @DisplayName("Debe eliminar definitivamente una publicación RECHAZADA invocando delete con esa entidad")
+    void eliminarPublicacion_Rechazada_EliminaDefinitivamente() {
+        Usuario duenio = new Usuario("vendedor-elimina@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(60L);
+        publicacion.setEstado(EstadoPublicacion.RECHAZADA);
+
+        when(publicacionRepository.findById(60L)).thenReturn(Optional.of(publicacion));
+
+        publicacionService.eliminarPublicacion(60L, 1L);
+
+        verify(publicacionRepository).delete(publicacion);
+    }
+
+    /**
+     * Verifica que eliminar una publicación en cualquier estado distinto de RECHAZADA sea rechazado
+     * con PublicacionNoEliminableException y que delete nunca se invoque (Story 3, spec.md: solo la
+     * rechazada se elimina definitivamente).
+     */
+    @Test
+    @DisplayName("Debe lanzar PublicacionNoEliminableException al eliminar en estados distintos de RECHAZADA")
+    void eliminarPublicacion_EstadoNoRechazado_LanzaPublicacionNoEliminableExceptionYNoElimina() {
+        Usuario duenio = new Usuario("vendedor-noelimina@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion pAprobada = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        pAprobada.setId(61L);
+        pAprobada.setEstado(EstadoPublicacion.APROBADA);
+
+        Publicacion pPendiente = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        pPendiente.setId(62L);
+        pPendiente.setEstado(EstadoPublicacion.PENDIENTE_REVISION);
+
+        Publicacion pCambios = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        pCambios.setId(63L);
+        pCambios.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
+
+        when(publicacionRepository.findById(61L)).thenReturn(Optional.of(pAprobada));
+        when(publicacionRepository.findById(62L)).thenReturn(Optional.of(pPendiente));
+        when(publicacionRepository.findById(63L)).thenReturn(Optional.of(pCambios));
+
+        assertThatThrownBy(() -> publicacionService.eliminarPublicacion(61L, 1L))
+            .isInstanceOf(PublicacionNoEliminableException.class)
+            .hasMessageContaining("estado 'RECHAZADA'");
+
+        assertThatThrownBy(() -> publicacionService.eliminarPublicacion(62L, 1L))
+            .isInstanceOf(PublicacionNoEliminableException.class);
+
+        assertThatThrownBy(() -> publicacionService.eliminarPublicacion(63L, 1L))
+            .isInstanceOf(PublicacionNoEliminableException.class);
+
+        verify(publicacionRepository, never()).delete(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que eliminar una publicación ajena lance NoEsElPropietarioException sin invocar delete
+     * (Story 3: solo el vendedor dueño elimina su publicación rechazada).
+     */
+    @Test
+    @DisplayName("Debe lanzar NoEsElPropietarioException al eliminar una publicación que no es del usuario")
+    void eliminarPublicacion_NoPropietario_LanzaNoEsElPropietarioExceptionYNoElimina() {
+        Usuario duenio = new Usuario("vendedor-ajeno@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(64L);
+        publicacion.setEstado(EstadoPublicacion.RECHAZADA);
+
+        when(publicacionRepository.findById(64L)).thenReturn(Optional.of(publicacion));
+
+        assertThatThrownBy(() -> publicacionService.eliminarPublicacion(64L, 999L))
+            .isInstanceOf(NoEsElPropietarioException.class)
+            .hasMessageContaining("no es el propietario");
+
+        verify(publicacionRepository, never()).delete(any(Publicacion.class));
+    }
 }
-
-

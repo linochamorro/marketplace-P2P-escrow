@@ -1,6 +1,7 @@
 package com.easymarket.marketplace.repository;
 
 import com.easymarket.marketplace.model.Usuario;
+import com.easymarket.marketplace.model.Rol;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -30,6 +31,17 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
      * @return un {@link Optional} conteniendo el usuario si fue encontrado, o vacío en caso contrario
      */
     Optional<Usuario> findByEmail(String email);
+
+    /**
+     * Busca la única cuenta que posee un rol del sistema.
+     *
+     * <p>La creación de publicaciones usa {@link Rol#ADMIN}; el plan establece que existe una
+     * única cuenta ADMIN provisionada fuera del registro público.</p>
+     *
+     * @param rol rol de la cuenta que se busca
+     * @return cuenta con ese rol, o vacío si la provisión del dato es inconsistente
+     */
+    Optional<Usuario> findByRol(Rol rol);
 
     /**
      * Incrementa atómicamente el saldo disponible cacheado de un vendedor en centavos.

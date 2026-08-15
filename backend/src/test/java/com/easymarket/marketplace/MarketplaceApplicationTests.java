@@ -6,6 +6,7 @@ import com.easymarket.marketplace.repository.LoginAttemptRepository;
 import com.easymarket.marketplace.repository.MovimientoSaldoRepository;
 import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.ProcessedStripeEventRepository;
+import com.easymarket.marketplace.repository.PublicacionEventoRepository;
 import com.easymarket.marketplace.repository.StripeRefundOutboxRepository;
 import com.easymarket.marketplace.repository.TransaccionEventoRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
@@ -65,6 +66,10 @@ class MarketplaceApplicationTests {
 
     @MockitoBean
     private com.easymarket.marketplace.repository.PublicacionRepository publicacionRepository;
+
+    /** Mock required by the PHA06 publication-creation audit dependency. */
+    @MockitoBean
+    private PublicacionEventoRepository publicacionEventoRepository;
 
     @MockitoBean
     private com.easymarket.marketplace.repository.TransaccionRepository transaccionRepository;

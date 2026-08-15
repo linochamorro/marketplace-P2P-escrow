@@ -1,11 +1,14 @@
 package com.easymarket.marketplace.service;
 
 import com.easymarket.marketplace.exception.CategoriaNoEncontradaException;
+import com.easymarket.marketplace.exception.AdministradorNoEncontradoException;
 import com.easymarket.marketplace.exception.CategoriaPublicacionInmutableException;
 import com.easymarket.marketplace.exception.EstadoPublicacionNoEditableException;
 import com.easymarket.marketplace.exception.MotivoRequeridoException;
+import com.easymarket.marketplace.exception.NoEsElPropietarioException;
 import com.easymarket.marketplace.exception.PrecioInvalidoException;
 import com.easymarket.marketplace.exception.PublicacionNoEncontradaException;
+import com.easymarket.marketplace.exception.PublicacionNoEliminableException;
 import com.easymarket.marketplace.exception.StockInvalidoException;
 import com.easymarket.marketplace.exception.SubcategoriaNoPerteneceACategoriaException;
 import com.easymarket.marketplace.exception.TransicionEstadoInvalidaException;
@@ -13,16 +16,22 @@ import com.easymarket.marketplace.exception.UsuarioNoEncontradoException;
 import com.easymarket.marketplace.model.Categoria;
 import com.easymarket.marketplace.model.EstadoPublicacion;
 import com.easymarket.marketplace.model.Publicacion;
+import com.easymarket.marketplace.model.PublicacionEvento;
+import com.easymarket.marketplace.model.Rol;
 import com.easymarket.marketplace.model.Subcategoria;
 import com.easymarket.marketplace.model.Usuario;
 import com.easymarket.marketplace.repository.CategoriaRepository;
 import com.easymarket.marketplace.repository.PublicacionRepository;
+import com.easymarket.marketplace.repository.PublicacionEventoRepository;
+import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.SubcategoriaRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.ZonedDateTime;
 
 /**
  * Servicio de dominio para la creación, consulta y máquina de estados de publicaciones (Stories 1, 2 y 3, spec.md).
@@ -48,6 +57,8 @@ public class PublicacionService {
     private final UsuarioRepository usuarioRepository;
     private final CategoriaRepository categoriaRepository;
     private final SubcategoriaRepository subcategoriaRepository;
+    private final PublicacionEventoRepository publicacionEventoRepository;
+    private final NotificacionRepository notificacionRepository;
 
     /**
      * Construye el servicio inyectando los repositorios necesarios.
@@ -56,15 +67,21 @@ public class PublicacionService {
      * @param usuarioRepository repositorio JPA de usuarios
      * @param categoriaRepository repositorio JPA de categorías
      * @param subcategoriaRepository repositorio JPA de subcategorías
+     * @param publicacionEventoRepository repositorio JPA del log append-only de creación
+     * @param notificacionRepository repositorio JPA de avisos in-app
      */
     public PublicacionService(PublicacionRepository publicacionRepository,
-                              UsuarioRepository usuarioRepository,
-                              CategoriaRepository categoriaRepository,
-                              SubcategoriaRepository subcategoriaRepository) {
+                               UsuarioRepository usuarioRepository,
+                               CategoriaRepository categoriaRepository,
+                               SubcategoriaRepository subcategoriaRepository,
+                               PublicacionEventoRepository publicacionEventoRepository,
+                               NotificacionRepository notificacionRepository) {
         this.publicacionRepository = publicacionRepository;
         this.usuarioRepository = usuarioRepository;
         this.categoriaRepository = categoriaRepository;
         this.subcategoriaRepository = subcategoriaRepository;
+        this.publicacionEventoRepository = publicacionEventoRepository;
+        this.notificacionRepository = notificacionRepository;
     }
 
     /**
@@ -82,6 +99,7 @@ public class PublicacionService {
      * @throws UsuarioNoEncontradoException si el usuario no existe
      * @throws CategoriaNoEncontradaException si la categoría o subcategoría no existen
      * @throws SubcategoriaNoPerteneceACategoriaException si la subcategoría no pertenece a la categoría especificada
+     * @throws AdministradorNoEncontradoException si falta la única cuenta ADMIN requerida para el aviso
      */
     @Transactional
     public Publicacion crearPublicacion(Long usuarioId, Long categoriaId, Long subcategoriaId, long precio, int stock, String descripcion) {
@@ -107,8 +125,22 @@ public class PublicacionService {
             );
         }
 
-        Publicacion publicacion = new Publicacion(usuario, categoria, subcategoria, precio, stock, descripcion);
-        return publicacionRepository.save(publicacion);
+        Publicacion publicacion = publicacionRepository.save(
+            new Publicacion(usuario, categoria, subcategoria, precio, stock, descripcion)
+        );
+        Usuario administrador = usuarioRepository.findByRol(Rol.ADMIN)
+            .orElseThrow(() -> new AdministradorNoEncontradoException(
+                "No existe la cuenta ADMIN única requerida para notificar la publicación pendiente"
+            ));
+        ZonedDateTime ahora = ZonedDateTime.now();
+        publicacionEventoRepository.save(new PublicacionEvento(publicacion, usuario, ahora));
+        notificacionRepository.save(new com.easymarket.marketplace.model.Notificacion(
+            administrador,
+            "Nueva publicación pendiente de revisión: #" + publicacion.getId(),
+            "NUEVA_PUBLICACION_PENDIENTE",
+            ahora
+        ));
+        return publicacion;
     }
 
     /**
@@ -173,6 +205,13 @@ public class PublicacionService {
         return publicacionRepository.save(publicacion);
     }
 
+    /**
+     * Determina si una transición pertenece a la máquina de estados habilitada por Stories 2 y 3.
+     *
+     * @param actual estado actualmente persistido
+     * @param nuevo estado solicitado
+     * @return {@code true} si el paso entre ambos estados está permitido, {@code false} de otro modo
+     */
     private boolean esTransicionValida(EstadoPublicacion actual, EstadoPublicacion nuevo) {
         return switch (actual) {
             case PENDIENTE_REVISION -> nuevo == EstadoPublicacion.APROBADA ||
@@ -185,32 +224,6 @@ public class PublicacionService {
         };
     }
 
-    /**
-     * Edita los campos permitidos (precio, stock, descripción) de una publicación en estado APROBADA (Story 3, spec.md).
-     *
-     * <p>Reglas de negocio:
-     * <ul>
-     *   <li>La publicación debe estar estrictamente en estado {@link EstadoPublicacion#APROBADA}.</li>
-     *   <li>Bloquea cualquier intento de cambiar la categoría o subcategoría respecto a sus valores actuales.</li>
-     *   <li>Valida precio estrictamente mayor a cero (centavos entero &gt; 0).</li>
-     *   <li>Valida stock mayor o igual a cero (stock &ge; 0, permitiendo agotamiento de stock a 0).</li>
-     *   <li>No altera el estado de la publicación ni dispara efectos secundarios de máquina de estados.</li>
-     * </ul>
-     * </p>
-     *
-     * @param publicacionId ID de la publicación a editar
-     * @param nuevoPrecio nuevo precio en centavos (> 0) o null para conservar
-     * @param nuevoStock nuevo stock (>= 0) o null para conservar
-     * @param nuevaDescripcion nueva descripción del producto o null para conservar
-     * @param categoriaIdEnviada ID de la categoría enviada en la solicitud
-     * @param subcategoriaIdEnviada ID de la subcategoría enviada en la solicitud
-     * @return la entidad {@link Publicacion} actualizada y persistida
-     * @throws PublicacionNoEncontradaException si la publicación no existe
-     * @throws EstadoPublicacionNoEditableException si la publicación no está en estado APROBADA
-     * @throws CategoriaPublicacionInmutableException si la categoría o subcategoría difieren de las actuales
-     * @throws PrecioInvalidoException si nuevoPrecio <= 0
-     * @throws StockInvalidoException si nuevoStock < 0
-     */
     /**
      * Edita los campos de una publicación por su vendedor propietario y gestiona la visibilidad por stock (Stories 3 y 10, spec.md).
      *
@@ -265,6 +278,25 @@ public class PublicacionService {
         return editarPublicacion(publicacionId, nuevoPrecio, nuevoStock, nuevaDescripcion, null, null);
     }
 
+    /**
+     * Edita los campos permitidos (precio, stock y descripción) de una publicación aprobada.
+     *
+     * <p>Conserva sin cambios los campos recibidos como {@code null}, rechaza modificaciones de
+     * categoría o subcategoría y no modifica el estado de la publicación.</p>
+     *
+     * @param publicacionId ID de la publicación a editar
+     * @param nuevoPrecio nuevo precio entero en centavos, mayor que cero, o {@code null} para conservarlo
+     * @param nuevoStock nuevo stock no negativo o {@code null} para conservarlo
+     * @param nuevaDescripcion nueva descripción o {@code null} para conservarla
+     * @param categoriaIdEnviada ID de categoría recibido o {@code null} cuando no se solicita cambiarla
+     * @param subcategoriaIdEnviada ID de subcategoría recibido o {@code null} cuando no se solicita cambiarla
+     * @return la publicación actualizada y persistida
+     * @throws PublicacionNoEncontradaException si no existe la publicación indicada
+     * @throws EstadoPublicacionNoEditableException si la publicación no está en estado {@link EstadoPublicacion#APROBADA}
+     * @throws CategoriaPublicacionInmutableException si la categoría o subcategoría recibida difiere de la actual
+     * @throws PrecioInvalidoException si {@code nuevoPrecio} es cero o negativo
+     * @throws StockInvalidoException si {@code nuevoStock} es negativo
+     */
     @Transactional
     public Publicacion editarPublicacion(Long publicacionId,
                                          Long nuevoPrecio,
@@ -313,6 +345,110 @@ public class PublicacionService {
         logger.info("Edición de publicación ID {}: precio={}, stock={}, descripción editada", publicacionId, publicacion.getPrecio(), publicacion.getStock());
 
         return publicacionRepository.save(publicacion);
+    }
+
+    /**
+     * Corrige la categoría y subcategoría de una publicación propia y la reenvía a revisión (Story 3, spec.md).
+     *
+     * <p>Solo es corregible una publicación en estado {@link EstadoPublicacion#CAMBIOS_SOLICITADOS} o
+     * {@link EstadoPublicacion#RECHAZADA}: la corrección actualiza la clasificación y transiciona la
+     * publicación a {@link EstadoPublicacion#PENDIENTE_REVISION} para una nueva moderación. La
+     * categoría y subcategoría de una publicación {@link EstadoPublicacion#APROBADA} son inmutables
+     * (solo cambian vía corrección desde {@code CAMBIOS_SOLICITADOS}). El reenvío no altera precio,
+     * stock ni descripción y no emite eventos ni notificaciones nuevas (el log append-only de
+     * publicaciones solo admite el tipo {@code CREADA}; constitution, principio 2).</p>
+     *
+     * @param publicacionId ID de la publicación a corregir
+     * @param usuarioId ID del usuario vendedor solicitante
+     * @param categoriaId ID de la nueva categoría raíz
+     * @param subcategoriaId ID de la nueva subcategoría (debe pertenecer a la categoría)
+     * @return la entidad {@link Publicacion} corregida y persistida en estado 'pendiente_revisión'
+     * @throws PublicacionNoEncontradaException si la publicación no existe
+     * @throws NoEsElPropietarioException si el usuarioId no coincide con el dueño
+     * @throws CategoriaPublicacionInmutableException si la publicación está en estado {@link EstadoPublicacion#APROBADA}
+     * @throws TransicionEstadoInvalidaException si el estado actual no es corregible (PENDIENTE_REVISION u OCULTA)
+     * @throws CategoriaNoEncontradaException si la categoría o subcategoría no existen
+     * @throws SubcategoriaNoPerteneceACategoriaException si la subcategoría no pertenece a la categoría indicada
+     */
+    @Transactional
+    public Publicacion corregirPublicacion(Long publicacionId, Long usuarioId, Long categoriaId, Long subcategoriaId) {
+        Publicacion publicacion = obtenerPublicacionPorId(publicacionId);
+
+        if (!publicacion.getUsuario().getId().equals(usuarioId)) {
+            throw new NoEsElPropietarioException(
+                "El usuario con ID " + usuarioId + " no es el propietario de la publicación " + publicacionId
+            );
+        }
+
+        EstadoPublicacion estadoActual = publicacion.getEstado();
+        if (estadoActual == EstadoPublicacion.APROBADA) {
+            throw new CategoriaPublicacionInmutableException(
+                "No se permite modificar la categoría o subcategoría de una publicación aprobada"
+            );
+        }
+        if (estadoActual != EstadoPublicacion.CAMBIOS_SOLICITADOS && estadoActual != EstadoPublicacion.RECHAZADA) {
+            throw new TransicionEstadoInvalidaException(
+                "Transición de estado no permitida: la publicación " + publicacionId + " no está en un estado corregible "
+                    + "(solo CAMBIOS_SOLICITADOS o RECHAZADA). Estado actual: " + estadoActual
+            );
+        }
+
+        Categoria categoria = categoriaRepository.findById(categoriaId)
+            .orElseThrow(() -> new CategoriaNoEncontradaException("Categoría raíz con ID " + categoriaId + " no encontrada"));
+
+        Subcategoria subcategoria = subcategoriaRepository.findById(subcategoriaId)
+            .orElseThrow(() -> new CategoriaNoEncontradaException("Subcategoría con ID " + subcategoriaId + " no encontrada"));
+
+        if (!subcategoria.getCategoria().getId().equals(categoriaId)) {
+            throw new SubcategoriaNoPerteneceACategoriaException(
+                "La subcategoría '" + subcategoria.getNombre() + "' (ID " + subcategoriaId + ") no pertenece a la categoría con ID " + categoriaId
+            );
+        }
+
+        publicacion.setCategoria(categoria);
+        publicacion.setSubcategoria(subcategoria);
+        publicacion.setEstado(EstadoPublicacion.PENDIENTE_REVISION);
+
+        logger.info("Corrección de publicación ID {}: nueva categoría/subcategoría ({}/{}), reenviada a revisión",
+            publicacionId, categoriaId, subcategoriaId);
+
+        return publicacionRepository.save(publicacion);
+    }
+
+    /**
+     * Elimina definitivamente una publicación propia en estado {@link EstadoPublicacion#RECHAZADA} (Story 3, spec.md).
+     *
+     * <p>La eliminación es la alternativa del vendedor a la corrección cuando su publicación fue
+     * rechazada por producto prohibido. Solo el propietario puede eliminar y solo una publicación
+     * {@code RECHAZADA} es eliminable: cualquier otro estado conserva la fila. El evento append-only
+     * {@code CREADA} queda conservado con {@code publicacion_id = NULL} gracias a la acción
+     * referencial {@code ON DELETE SET NULL} de la migración V16 (constitution, principio 2).</p>
+     *
+     * @param publicacionId ID de la publicación a eliminar
+     * @param usuarioId ID del usuario vendedor solicitante
+     * @throws PublicacionNoEncontradaException si la publicación no existe
+     * @throws NoEsElPropietarioException si el usuarioId no coincide con el dueño
+     * @throws PublicacionNoEliminableException si la publicación no está en estado {@link EstadoPublicacion#RECHAZADA}
+     */
+    @Transactional
+    public void eliminarPublicacion(Long publicacionId, Long usuarioId) {
+        Publicacion publicacion = obtenerPublicacionPorId(publicacionId);
+
+        if (!publicacion.getUsuario().getId().equals(usuarioId)) {
+            throw new NoEsElPropietarioException(
+                "El usuario con ID " + usuarioId + " no es el propietario de la publicación " + publicacionId
+            );
+        }
+
+        if (publicacion.getEstado() != EstadoPublicacion.RECHAZADA) {
+            throw new PublicacionNoEliminableException(
+                "Solo se puede eliminar definitivamente una publicación en estado 'RECHAZADA'. Estado actual: " + publicacion.getEstado()
+            );
+        }
+
+        logger.info("Eliminación definitiva de publicación rechazada ID {}", publicacionId);
+
+        publicacionRepository.delete(publicacion);
     }
 
     /**
@@ -388,5 +524,3 @@ public class PublicacionService {
         return publicacionRepository.findByUsuarioIdOrderByCreatedAtDescIdDesc(usuarioId);
     }
 }
-
-

@@ -1,5 +1,6 @@
 package com.easymarket.marketplace.repository;
 
+import com.easymarket.marketplace.model.EstadoTransaccion;
 import com.easymarket.marketplace.model.Transaccion;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,7 +17,8 @@ import java.util.Optional;
  *
  * <p>Incluye el bloqueo pesimista requerido para confirmar recepción: una segunda confirmación
  * concurrente espera la primera y luego valida el estado ya actualizado, evitando doble crédito.
- * Las consultas de historial y conteos pertenecen a tareas futuras de {@code tasks.md}.</p>
+ * Incluye el conteo de ventas completadas para PHA05TSK01; las consultas de historial pertenecen
+ * a tareas futuras de {@code tasks.md}.</p>
  */
 @Repository
 public interface TransaccionRepository extends JpaRepository<Transaccion, Long> {
@@ -83,4 +85,21 @@ public interface TransaccionRepository extends JpaRepository<Transaccion, Long> 
         + "where estado in ('reservada', 'enviado', 'entregado', 'disputa') "
         + "for update skip locked", nativeQuery = true)
     List<Transaccion> findAbiertasForUpdateSkipLocked();
+
+    /**
+     * Counts the transactions of one publication that Story 11 defines as completed sales.
+     *
+     * <p>The query deliberately includes exactly {@link EstadoTransaccion#COMPLETADA},
+     * {@link EstadoTransaccion#RECIBIDO}, and {@link EstadoTransaccion#RECIBIDO_SIN_RESPUESTA}.
+     * It is read-only and performs neither state transitions nor modifications to funds or stock.
+     * Ordering publications by this value belongs to PHA05TSK02.</p>
+     *
+     * @param publicacionId identifier of the publication whose completed-sale transactions are counted
+     * @return number of matching transactions, including zero when the publication has none
+     */
+    @Query("select count(t) from Transaccion t where t.publicacion.id = :publicacionId "
+        + "and t.estado in (com.easymarket.marketplace.model.EstadoTransaccion.COMPLETADA, "
+        + "com.easymarket.marketplace.model.EstadoTransaccion.RECIBIDO, "
+        + "com.easymarket.marketplace.model.EstadoTransaccion.RECIBIDO_SIN_RESPUESTA)")
+    long contarTransaccionesCompletadasPorPublicacion(@Param("publicacionId") Long publicacionId);
 }

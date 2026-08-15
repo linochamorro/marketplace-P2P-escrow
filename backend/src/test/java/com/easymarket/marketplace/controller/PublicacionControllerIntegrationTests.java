@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -94,6 +95,10 @@ public class PublicacionControllerIntegrationTests {
     @Autowired
     private com.easymarket.marketplace.repository.AdminAccionRepository adminAccionRepository;
 
+    /** Cliente SQL usado solo para vaciar fixtures append-only entre pruebas de integración. */
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @Autowired
     private PasswordEncoder passwordEncoder;
 
@@ -104,6 +109,14 @@ public class PublicacionControllerIntegrationTests {
     private Subcategoria subcategoriaMotosCatIncompatible;
     private final String passwordRaw = "PasswordSeguro123!";
 
+    /**
+     * Prepara un contexto HTTP y un conjunto aislado de usuarios, categorías y subcategorías para
+     * cada caso de integración.
+     *
+     * <p>Antes de recrear los datos padre, vacía las proyecciones y auditorías de fixture mediante
+     * {@link #limpiarFixturesAppendOnly()} para que las FKs de los efectos creados por Story 1 no
+     * interfieran con otro caso. Esta limpieza existe exclusivamente en Testcontainers.</p>
+     */
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
@@ -111,6 +124,7 @@ public class PublicacionControllerIntegrationTests {
                 .apply(springSecurity())
                 .build();
 
+        limpiarFixturesAppendOnly();
         adminAccionRepository.deleteAll();
         publicacionRepository.deleteAll();
         subcategoriaRepository.deleteAll();
@@ -143,6 +157,26 @@ public class PublicacionControllerIntegrationTests {
         subcategoriaMotosCatIncompatible = subcategoriaRepository.save(new Subcategoria(categoriaElectronica, "Smartphones"));
     }
 
+    /**
+     * Vacía únicamente tablas de fixture antes de borrar sus filas padre.
+     *
+     * <p>{@code TRUNCATE} es DDL de limpieza exclusivo de Testcontainers: no ejecuta {@code DELETE}
+     * sobre {@code publicacion_eventos}, por lo que el trigger append-only de V15 permanece intacto
+     * y no se aplica a producción. Se incluye {@code avisos_envio_pendiente} porque referencia
+     * {@code notificaciones} y PostgreSQL exige truncar juntas las tablas relacionadas.</p>
+     */
+    private void limpiarFixturesAppendOnly() {
+        jdbcTemplate.execute("TRUNCATE TABLE publicacion_eventos, avisos_envio_pendiente, notificaciones RESTART IDENTITY");
+    }
+
+    /**
+     * Inicia sesión mediante MockMvc y obtiene la cookie JWT emitida para las solicitudes autenticadas del escenario.
+     *
+     * @param email correo de la cuenta de prueba que inicia sesión
+     * @param password contraseña en texto plano de la cuenta de prueba
+     * @return cookie {@code jwt} devuelta por el endpoint de inicio de sesión
+     * @throws Exception si MockMvc o la serialización de la solicitud no pueden completar el inicio de sesión
+     */
     private Cookie obtenerCookieJwtPostLogin(String email, String password) throws Exception {
         LoginRequestDto loginRequest = new LoginRequestDto(email, password);
 
@@ -740,18 +774,18 @@ public class PublicacionControllerIntegrationTests {
 
     /**
      * Verifica que una petición a {@code GET /publicaciones} sin parámetro {@code estado}
-     * recibe HTTP 400 Bad Request (el parámetro es obligatorio, Story 2, spec.md).
+     * se resuelve por el listado público de Story 11 y recibe HTTP 200 OK.
      *
      * @throws Exception si falla la petición HTTP
      */
     @Test
-    @DisplayName("GET /publicaciones sin parámetro estado retorna 400 Bad Request")
-    void listarPorEstado_SinParametroEstado_Retorna400() throws Exception {
+    @DisplayName("GET /publicaciones sin parámetro estado retorna 200 OK mediante el listado público")
+    void listarSinEstado_UsaListadoPublico_Retorna200() throws Exception {
         Cookie cookieUsuario = obtenerCookieJwtPostLogin(usuarioRegular.getEmail(), passwordRaw);
 
         mockMvc.perform(get("/publicaciones")
                         .cookie(cookieUsuario))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk());
     }
 
     // =========================================================================================

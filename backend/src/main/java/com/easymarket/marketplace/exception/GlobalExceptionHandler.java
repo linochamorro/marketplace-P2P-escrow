@@ -279,6 +279,19 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Traduce el rango de precios invertido del listado de Story 11 al contrato HTTP de cliente.
+     *
+     * @param ex excepción específica emitida cuando el mínimo supera el máximo
+     * @return {@link ResponseEntity} con código HTTP 400 Bad Request y el mensaje de dominio
+     */
+    @ExceptionHandler(RangoPrecioInvalidoException.class)
+    public ResponseEntity<Map<String, String>> handleRangoPrecioInvalido(RangoPrecioInvalidoException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
      * Maneja violaciones de autorización lanzadas explícitamente desde la capa de controlador.
      *
      * <p>Cubre casos como el intento de un usuario sin rol {@code ADMIN} de consultar
