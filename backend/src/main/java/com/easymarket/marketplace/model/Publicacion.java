@@ -52,6 +52,9 @@ public class Publicacion {
     @Column(name = "descripcion", nullable = false, columnDefinition = "TEXT")
     private String descripcion;
 
+    @Column(name = "imagen_filename")
+    private String imagenFilename;
+
     @Column(name = "created_at", nullable = false)
     private ZonedDateTime createdAt;
 
@@ -246,6 +249,28 @@ public class Publicacion {
      */
     public void setDescripcion(String descripcion) {
         this.descripcion = descripcion;
+    }
+
+    /**
+     * Obtiene el nombre del archivo de imagen de la publicación.
+     *
+     * <p>La BD conserva únicamente el nombre de archivo (sin prefijo de URL); el
+     * frontend construye la ruta estática {@code /imagenes/publicaciones/{nombre}}.
+     * {@code null} indica que la publicación aún no tiene imagen asignada.</p>
+     *
+     * @return nombre de archivo de imagen, o {@code null} si no tiene
+     */
+    public String getImagenFilename() {
+        return imagenFilename;
+    }
+
+    /**
+     * Establece el nombre del archivo de imagen de la publicación.
+     *
+     * @param imagenFilename nombre de archivo de imagen (sin prefijo de URL)
+     */
+    public void setImagenFilename(String imagenFilename) {
+        this.imagenFilename = imagenFilename;
     }
 
     /**

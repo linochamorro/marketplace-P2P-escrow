@@ -13,6 +13,7 @@ import com.easymarket.marketplace.model.Publicacion;
  * @param categoriaId ID de la categoría raíz
  * @param subcategoriaId ID de la subcategoría
  * @param usuarioId ID del usuario vendedor propietario de la publicación
+ * @param imagenFilename nombre de archivo de imagen (sin prefijo de URL); puede ser {@code null}
  */
 public record PublicacionResponseDto(
         Long id,
@@ -22,7 +23,8 @@ public record PublicacionResponseDto(
         String descripcion,
         Long categoriaId,
         Long subcategoriaId,
-        Long usuarioId
+        Long usuarioId,
+        String imagenFilename
 ) {
     /**
      * Mapea una entidad JPA {@link Publicacion} a su representación DTO de respuesta.
@@ -39,7 +41,8 @@ public record PublicacionResponseDto(
                 publicacion.getDescripcion(),
                 publicacion.getCategoria().getId(),
                 publicacion.getSubcategoria().getId(),
-                publicacion.getUsuario().getId()
+                publicacion.getUsuario().getId(),
+                publicacion.getImagenFilename()
         );
     }
 }
