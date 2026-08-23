@@ -84,7 +84,16 @@ class TransaccionConfirmacionReclamoControllerIntegrationTests {
     private Usuario vendedor;
     private Usuario comprador;
     private Usuario tercero;
-    private Usuario admin;
+    /**
+     * Identidad auxiliar no compradora para verificar el rechazo 403 de los endpoints.
+     *
+     * <p>Nace con {@link Rol#USUARIO}, no con {@code ADMIN}: el sistema garantiza una única
+     * cuenta ADMIN provisionada fuera del registro público (invariante declarada en
+     * {@code UsuarioRepository.findByRol}, PHA06TSK02), y desde PHA12TSK03 el reclamo exitoso
+     * emite DISPUTA_PENDIENTE_RESOLVER al admin vía {@code findByRol(Rol.ADMIN)}, que exige
+     * resultado único. Crear ADMINs adicionales aquí rompería esa invariante.</p>
+     */
+    private Usuario auxiliar;
     private Categoria categoria;
     private Subcategoria subcategoria;
 
@@ -96,7 +105,7 @@ class TransaccionConfirmacionReclamoControllerIntegrationTests {
         vendedor = guardarUsuario("vendedor.confirmacion." + sufijo + "@easymarket.com", Rol.USUARIO);
         comprador = guardarUsuario("comprador.confirmacion." + sufijo + "@easymarket.com", Rol.USUARIO);
         tercero = guardarUsuario("tercero.confirmacion." + sufijo + "@easymarket.com", Rol.USUARIO);
-        admin = guardarUsuario("admin.confirmacion." + sufijo + "@easymarket.com", Rol.ADMIN);
+        auxiliar = guardarUsuario("auxiliar.confirmacion." + sufijo + "@easymarket.com", Rol.USUARIO);
         categoria = categoriaRepository.save(new Categoria("Categoría " + sufijo));
         subcategoria = subcategoriaRepository.save(new Subcategoria(categoria, "Subcategoría " + sufijo));
     }
@@ -163,27 +172,28 @@ class TransaccionConfirmacionReclamoControllerIntegrationTests {
     }
 
     /**
-     * Comprueba que vendedor, administrador y tercero no pueden actuar como comprador en ambos endpoints.
+     * Comprueba que vendedor, usuario auxiliar no comprador y tercero no pueden actuar como
+     * comprador en ambos endpoints.
      *
      * @throws Exception si falla la interacción HTTP
      */
     @Test
-    @DisplayName("PATCH confirmar y reclamar por vendedor admin o tercero retornan 403")
+    @DisplayName("PATCH confirmar y reclamar por vendedor usuario auxiliar o tercero retornan 403")
     void endpoints_ActorNoComprador_Retornan403() throws Exception {
         Cookie cookieVendedor = obtenerCookieJwtPostLogin(vendedor);
-        Cookie cookieAdmin = obtenerCookieJwtPostLogin(admin);
+        Cookie cookieAuxiliar = obtenerCookieJwtPostLogin(auxiliar);
         Cookie cookieTercero = obtenerCookieJwtPostLogin(tercero);
 
         mockMvc.perform(patch("/transacciones/{id}/confirmar", guardarTransaccion(EstadoTransaccion.ENTREGADO,
                         ZonedDateTime.now()).getId()).cookie(cookieVendedor)).andExpect(status().isForbidden());
         mockMvc.perform(patch("/transacciones/{id}/confirmar", guardarTransaccion(EstadoTransaccion.ENTREGADO,
-                        ZonedDateTime.now()).getId()).cookie(cookieAdmin)).andExpect(status().isForbidden());
+                        ZonedDateTime.now()).getId()).cookie(cookieAuxiliar)).andExpect(status().isForbidden());
         mockMvc.perform(patch("/transacciones/{id}/confirmar", guardarTransaccion(EstadoTransaccion.ENTREGADO,
                         ZonedDateTime.now()).getId()).cookie(cookieTercero)).andExpect(status().isForbidden());
         mockMvc.perform(patch("/transacciones/{id}/reclamar", guardarTransaccion(EstadoTransaccion.ENTREGADO,
                         ZonedDateTime.now()).getId()).cookie(cookieVendedor)).andExpect(status().isForbidden());
         mockMvc.perform(patch("/transacciones/{id}/reclamar", guardarTransaccion(EstadoTransaccion.ENTREGADO,
-                        ZonedDateTime.now()).getId()).cookie(cookieAdmin)).andExpect(status().isForbidden());
+                        ZonedDateTime.now()).getId()).cookie(cookieAuxiliar)).andExpect(status().isForbidden());
         mockMvc.perform(patch("/transacciones/{id}/reclamar", guardarTransaccion(EstadoTransaccion.ENTREGADO,
                         ZonedDateTime.now()).getId()).cookie(cookieTercero)).andExpect(status().isForbidden());
     }

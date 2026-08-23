@@ -22,7 +22,10 @@ import java.util.List;
  * <p>The job polls every 15 minutes, the shortest frequency permitted by plan.md for this timer.
  * One transaction spans row selection with PostgreSQL {@code FOR UPDATE SKIP LOCKED}, the cached
  * seller balance credit, its append-only ledger row, the state transition, and its append-only
- * system event. It does not alter stock because PHA03 discounted it at reservation time.</p>
+ * system event. Since PHA12TSK03 (recovery of PHA09TSK05) it also emits, within that same
+ * transaction, the actionable COMPRA_CONFIRMADA notification to both buyer and seller with
+ * role-directed messages ("tu compra"/"tu venta") that the UI routes. It does not alter stock
+ * because PHA03 discounted it at reservation time.</p>
  */
 @Component
 public class AutoConfirmarRecepcionJob {
@@ -31,6 +34,7 @@ public class AutoConfirmarRecepcionJob {
     private final UsuarioRepository usuarioRepository;
     private final MovimientoSaldoRepository movimientoSaldoRepository;
     private final TransaccionEventoRepository transaccionEventoRepository;
+    private final NotificacionService notificacionService;
 
     /**
      * Creates the scheduled automatic reception-confirmation job.
@@ -39,15 +43,18 @@ public class AutoConfirmarRecepcionJob {
      * @param usuarioRepository repository that atomically increments the cached seller balance
      * @param movimientoSaldoRepository repository that appends seller ledger credits
      * @param transaccionEventoRepository repository that appends system transition events
+     * @param notificacionService actionable-notification domain service (PHA09TSK05)
      */
     public AutoConfirmarRecepcionJob(TransaccionRepository transaccionRepository,
                                      UsuarioRepository usuarioRepository,
                                      MovimientoSaldoRepository movimientoSaldoRepository,
-                                     TransaccionEventoRepository transaccionEventoRepository) {
+                                     TransaccionEventoRepository transaccionEventoRepository,
+                                     NotificacionService notificacionService) {
         this.transaccionRepository = transaccionRepository;
         this.usuarioRepository = usuarioRepository;
         this.movimientoSaldoRepository = movimientoSaldoRepository;
         this.transaccionEventoRepository = transaccionEventoRepository;
+        this.notificacionService = notificacionService;
     }
 
     /**
@@ -69,7 +76,8 @@ public class AutoConfirmarRecepcionJob {
     }
 
     /**
-     * Persists every financial and audit effect of one transaction already locked as eligible.
+     * Persists every financial and audit effect of one transaction already locked as eligible and
+     * emits the actionable COMPRA_CONFIRMADA notification to both parties.
      *
      * @param transaccion delivered transaction locked by {@link #ejecutar()}
      * @param ahora instant recorded on the append-only records
@@ -83,5 +91,22 @@ public class AutoConfirmarRecepcionJob {
         movimientoSaldoRepository.save(new MovimientoSaldo(persistida, vendedor, monto, ahora));
         transaccionEventoRepository.save(new TransaccionEvento(persistida, null,
             EstadoTransaccion.ENTREGADO, EstadoTransaccion.RECIBIDO_SIN_RESPUESTA, null, ahora));
+
+        // Notificaciones accionables a comprador y vendedor (PHA09TSK05, recuperado en PHA12TSK03),
+        // emitidas dentro de la misma transacción del job (constitution, principio 1).
+        notificacionService.crearNotificacionUsuario(
+            persistida.getComprador(),
+            "COMPRA_CONFIRMADA",
+            "Se confirmó automáticamente tu compra #" + persistida.getId()
+                + " al cumplirse 48 horas sin acción del comprador",
+            persistida,
+            ahora);
+        notificacionService.crearNotificacionUsuario(
+            vendedor,
+            "COMPRA_CONFIRMADA",
+            "El comprador no respondió en 48 horas; tu venta #" + persistida.getId()
+                + " fue confirmada automáticamente y el saldo fue acreditado",
+            persistida,
+            ahora);
     }
 }

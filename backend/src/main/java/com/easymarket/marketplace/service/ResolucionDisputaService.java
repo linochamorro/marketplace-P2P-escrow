@@ -33,8 +33,11 @@ import java.time.ZonedDateTime;
  * a favor del vendedor transiciona a {@code completada} y acredita su precio snapshot entero en el
  * ledger interno; una decisión a favor del comprador transiciona a {@code cancelada}, restaura una
  * unidad y persiste una orden durable de refund. Los efectos locales y el evento append-only con el
- * admin responsable ocurren en la misma transacción; esta clase no autoriza el rol ADMIN ni llama a
- * Stripe, responsabilidades de PHA04TSK15 y PHA04TSK25 respectivamente.</p>
+ * admin responsable ocurren en la misma transacción; desde PHA12TSK03 (recuperación de PHA09TSK05)
+ * ambas ramas emiten también, en esa misma transacción, la notificación accionable
+ * DISPUTA_RESUELTA al comprador y al vendedor con mensajes dirigidos ("tu compra"/"tu venta") que
+ * la UI enruta. Esta clase no autoriza el rol ADMIN ni llama a Stripe, responsabilidades de
+ * PHA04TSK15 y PHA04TSK25 respectivamente.</p>
  */
 @Service
 public class ResolucionDisputaService {
@@ -46,9 +49,11 @@ public class ResolucionDisputaService {
     private final IdempotencyKeyRepository idempotencyKeyRepository;
     private final TransaccionEventoRepository transaccionEventoRepository;
     private final StripeRefundOutboxRepository stripeRefundOutboxRepository;
+    private final NotificacionService notificacionService;
 
     /**
-     * Construye el servicio con los repositorios necesarios para ambos resultados de la resolución.
+     * Construye el servicio con los repositorios necesarios para ambos resultados de la resolución
+     * y el servicio de notificaciones accionables.
      *
      * @param transaccionRepository repositorio que bloquea y persiste la transacción disputada
      * @param usuarioRepository repositorio que identifica al admin y acredita el saldo del vendedor
@@ -57,13 +62,15 @@ public class ResolucionDisputaService {
      * @param idempotencyKeyRepository repositorio de correlación con el PaymentIntent
      * @param transaccionEventoRepository repositorio que inserta el evento append-only
      * @param stripeRefundOutboxRepository repositorio que persiste la orden durable de refund
+     * @param notificacionService servicio de dominio para notificaciones accionables (PHA09TSK05)
      */
     public ResolucionDisputaService(TransaccionRepository transaccionRepository, UsuarioRepository usuarioRepository,
                                     MovimientoSaldoRepository movimientoSaldoRepository,
                                     PublicacionRepository publicacionRepository,
                                     IdempotencyKeyRepository idempotencyKeyRepository,
                                     TransaccionEventoRepository transaccionEventoRepository,
-                                    StripeRefundOutboxRepository stripeRefundOutboxRepository) {
+                                    StripeRefundOutboxRepository stripeRefundOutboxRepository,
+                                    NotificacionService notificacionService) {
         this.transaccionRepository = transaccionRepository;
         this.usuarioRepository = usuarioRepository;
         this.movimientoSaldoRepository = movimientoSaldoRepository;
@@ -71,6 +78,7 @@ public class ResolucionDisputaService {
         this.idempotencyKeyRepository = idempotencyKeyRepository;
         this.transaccionEventoRepository = transaccionEventoRepository;
         this.stripeRefundOutboxRepository = stripeRefundOutboxRepository;
+        this.notificacionService = notificacionService;
     }
 
     /**
@@ -80,7 +88,9 @@ public class ResolucionDisputaService {
      * transacción se rechaza todo estado distinto de {@code disputa}. Para el comprador, la
      * correlación Stripe se obtiene y valida antes de modificar estado, stock, auditoría u outbox.
      * El texto persistido en el evento incluye la decisión explícita y el motivo literal, porque la
-     * tabla de eventos solo dispone de la columna {@code motivo} para ese detalle auditable.</p>
+     * tabla de eventos solo dispone de la columna {@code motivo} para ese detalle auditable. Ambas
+     * ramas emiten al final, dentro de la misma transacción, la notificación accionable
+     * DISPUTA_RESUELTA al comprador y al vendedor.</p>
      *
      * @param transaccionId ID de la transacción en disputa
      * @param adminId ID del usuario administrador responsable, registrado como actor del evento
@@ -116,9 +126,39 @@ public class ResolucionDisputaService {
         String detalleEvento = decision.name() + ": " + motivo;
 
         if (decision == ResolucionDisputa.A_FAVOR_VENDEDOR) {
-            return resolverAFavorVendedor(transaccion, admin, detalleEvento, ahora);
+            Transaccion resuelta = resolverAFavorVendedor(transaccion, admin, detalleEvento, ahora);
+            notificarResolucion(resuelta, detalleEvento, ahora);
+            return resuelta;
         }
-        return resolverAFavorComprador(transaccion, admin, detalleEvento, ahora);
+        Transaccion resuelta = resolverAFavorComprador(transaccion, admin, detalleEvento, ahora);
+        notificarResolucion(resuelta, detalleEvento, ahora);
+        return resuelta;
+    }
+
+    /**
+     * Emite las notificaciones accionables DISPUTA_RESUELTA al comprador y al vendedor de una
+     * disputa ya resuelta (PHA09TSK05, recuperado en PHA12TSK03), dentro de la misma transacción
+     * que los efectos de la resolución (constitution, principio 1). Los mensajes incluyen la
+     * decisión y el motivo y usan las expresiones dirigidas ("tu compra"/"tu venta") que la UI
+     * enruta a la gestión correspondiente.
+     *
+     * @param transaccion transacción ya persistida como {@code completada} o {@code cancelada}
+     * @param detalleEvento decisión y motivo validados incluidos en el mensaje
+     * @param ahora instante común de los registros persistidos
+     */
+    private void notificarResolucion(Transaccion transaccion, String detalleEvento, ZonedDateTime ahora) {
+        notificacionService.crearNotificacionUsuario(
+            transaccion.getComprador(),
+            "DISPUTA_RESUELTA",
+            "Se resolvió la disputa de tu compra #" + transaccion.getId() + ": " + detalleEvento,
+            transaccion,
+            ahora);
+        notificacionService.crearNotificacionUsuario(
+            transaccion.getPublicacion().getUsuario(),
+            "DISPUTA_RESUELTA",
+            "Se resolvió la disputa de tu venta #" + transaccion.getId() + ": " + detalleEvento,
+            transaccion,
+            ahora);
     }
 
     /**

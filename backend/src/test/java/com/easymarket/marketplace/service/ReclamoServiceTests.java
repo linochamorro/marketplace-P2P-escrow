@@ -4,12 +4,14 @@ import com.easymarket.marketplace.exception.ActorNoEsCompradorTransaccionExcepti
 import com.easymarket.marketplace.exception.PlazoReclamoExcedidoException;
 import com.easymarket.marketplace.exception.TransicionEstadoTransaccionInvalidaException;
 import com.easymarket.marketplace.model.EstadoTransaccion;
+import com.easymarket.marketplace.model.Notificacion;
 import com.easymarket.marketplace.model.Publicacion;
 import com.easymarket.marketplace.model.Transaccion;
 import com.easymarket.marketplace.model.TransaccionEvento;
 import com.easymarket.marketplace.model.Usuario;
 import com.easymarket.marketplace.repository.TransaccionEventoRepository;
 import com.easymarket.marketplace.repository.TransaccionRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +29,10 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,7 +44,10 @@ import static org.mockito.Mockito.when;
  * Story 6d define el motivo como texto libre, sin declararlo obligatorio como hace explícitamente
  * la Story 7 para cancelaciones, {@code null} y la cadena vacía se aceptan y se registran sin
  * transformación. El reclamo solo cambia el estado y crea el evento: no libera ni revierte fondos,
- * no crea movimientos de saldo y no modifica stock.</p>
+ * no crea movimientos de saldo y no modifica stock. Desde PHA12TSK03 (recuperación de PHA09TSK05)
+ * verifica además que el reclamo exitoso emite, dentro de la misma transacción, DISPUTA_ABIERTA al
+ * comprador y al vendedor con los mensajes dirigidos ("tu compra"/"tu venta") que la UI enruta, y
+ * DISPUTA_PENDIENTE_RESOLVER al admin único; ningún rechazo temprano emite notificaciones.</p>
  */
 @ExtendWith(MockitoExtension.class)
 class ReclamoServiceTests {
@@ -54,6 +63,36 @@ class ReclamoServiceTests {
 
     @Mock
     private TransaccionEventoRepository transaccionEventoRepository;
+
+    @Mock
+    private NotificacionService notificacionService;
+
+    /**
+     * Configura el mock de {@link NotificacionService} en modo leniente para que responda a cada
+     * emisión accionable construyendo la instancia real de {@link Notificacion} con los argumentos
+     * recibidos (patrón de PHA09TSK05-L02). Es leniente porque los tests de rechazo temprano nunca
+     * llegan a emitir notificaciones y, sin {@code lenient()}, Mockito reportaría stubbings
+     * innecesarios para esas pruebas. El stub de {@code crearNotificacionAdmin} usa un usuario
+     * admin simulado porque la resolución del destinatario real ocurre dentro del servicio
+     * notificado, no en el servicio bajo prueba.
+     */
+    @BeforeEach
+    void setUp() {
+        lenient().when(notificacionService.crearNotificacionUsuario(any(), any(), any(), any(), any()))
+            .thenAnswer(invocation -> new Notificacion(
+                invocation.getArgument(0),
+                invocation.getArgument(3),
+                invocation.getArgument(2),
+                invocation.getArgument(1),
+                invocation.getArgument(4)));
+        lenient().when(notificacionService.crearNotificacionAdmin(any(), any(), any(), any()))
+            .thenAnswer(invocation -> new Notificacion(
+                usuario(ADMIN_ID),
+                invocation.getArgument(2),
+                invocation.getArgument(1),
+                invocation.getArgument(0),
+                invocation.getArgument(3)));
+    }
 
     /**
      * Rechaza un reclamo repetido porque disputa no puede volver a transicionar a disputa.
@@ -165,6 +204,12 @@ class ReclamoServiceTests {
         assertThat(evento.getEstadoOrigen()).isEqualTo(EstadoTransaccion.ENTREGADO);
         assertThat(evento.getEstadoDestino()).isEqualTo(EstadoTransaccion.DISPUTA);
         assertThat(evento.getMotivo()).isEqualTo("Producto distinto al publicado");
+        verify(notificacionService).crearNotificacionUsuario(same(resultado.getComprador()),
+            eq("DISPUTA_ABIERTA"), contains("tu compra"), same(resultado), any(ZonedDateTime.class));
+        verify(notificacionService).crearNotificacionUsuario(same(resultado.getPublicacion().getUsuario()),
+            eq("DISPUTA_ABIERTA"), contains("tu venta"), same(resultado), any(ZonedDateTime.class));
+        verify(notificacionService).crearNotificacionAdmin(eq("DISPUTA_PENDIENTE_RESOLVER"),
+            contains(String.valueOf(TRANSACCION_ID)), same(resultado), any(ZonedDateTime.class));
     }
 
     /**
@@ -186,7 +231,7 @@ class ReclamoServiceTests {
      * @return servicio configurado con los mocks y el instante {@link #AHORA}
      */
     private ReclamoService service() {
-        return new ReclamoService(transaccionRepository, transaccionEventoRepository,
+        return new ReclamoService(transaccionRepository, transaccionEventoRepository, notificacionService,
             Clock.fixed(AHORA.toInstant(), ZoneOffset.UTC));
     }
 
@@ -235,10 +280,13 @@ class ReclamoServiceTests {
     }
 
     /**
-     * Verifica que un rechazo no persiste una transición ni un evento append-only.
+     * Verifica que un rechazo no persiste una transición, un evento append-only ni emite
+     * notificaciones.
      */
     private void verificarSinEscrituras() {
         verify(transaccionRepository, never()).save(any());
         verify(transaccionEventoRepository, never()).save(any());
+        verify(notificacionService, never()).crearNotificacionUsuario(any(), any(), any(), any(), any());
+        verify(notificacionService, never()).crearNotificacionAdmin(any(), any(), any(), any());
     }
 }
