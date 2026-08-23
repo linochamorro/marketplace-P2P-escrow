@@ -572,4 +572,42 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.BAD_REQUEST)
                 .body(Map.of("mensaje", ex.getMessage()));
     }
+
+    /**
+     * Maneja operaciones sobre notificaciones in-app cuyo identificador no existe.
+     *
+     * <p>Corresponde a {@code PATCH /notificaciones/{id}/leer} (PHA09TSK05, recuperado en
+     * PHA12TSK04) cuando {@code NotificacionService.marcarComoLeida} no encuentra la
+     * notificación solicitada.</p>
+     *
+     * @param ex excepción de notificación no encontrada
+     * @return {@link ResponseEntity} con código HTTP 404 Not Found y el mensaje de dominio en el
+     *         cuerpo JSON bajo la clave {@code mensaje}
+     */
+    @ExceptionHandler(NotificacionNoEncontradaException.class)
+    public ResponseEntity<Map<String, String>> handleNotificacionNoEncontrada(
+            NotificacionNoEncontradaException ex) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja intentos de operar sobre una notificación in-app por parte de un usuario que no es
+     * su destinatario.
+     *
+     * <p>Corresponde a {@code PATCH /notificaciones/{id}/leer} (PHA09TSK05, recuperado en
+     * PHA12TSK04) cuando el usuario autenticado difiere del destinatario de la notificación; la
+     * notificación permanece sin mutar.</p>
+     *
+     * @param ex excepción de usuario no autorizado sobre la notificación
+     * @return {@link ResponseEntity} con código HTTP 403 Forbidden y el mensaje de dominio en el
+     *         cuerpo JSON bajo la clave {@code mensaje}
+     */
+    @ExceptionHandler(UsuarioNoAutorizadoException.class)
+    public ResponseEntity<Map<String, String>> handleUsuarioNoAutorizado(UsuarioNoAutorizadoException ex) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
 }
