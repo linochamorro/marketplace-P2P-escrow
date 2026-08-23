@@ -81,6 +81,40 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     /**
+     * Indica que este filtro SÍ debe ejecutarse también durante los despachos (dispatches) de
+     * tipo ERROR hacia {@code /error}, devolviendo deliberadamente {@code false} para anular el
+     * valor por defecto {@code true} de {@link OncePerRequestFilter}.
+     *
+     * <p><strong>Problema que resuelve.</strong> Cuando una excepción no manejada escapa de un
+     * controlador, el contenedor servlet realiza un segundo pase (dispatch ERROR) hacia
+     * {@code /error}. Con el comportamiento por defecto ({@code shouldNotFilterErrorDispatch()}
+     * = {@code true}), este filtro se omitía en ese segundo pase: la petición a {@code /error}
+     * llegaba sin autenticación al {@code SecurityConfig} y la regla
+     * {@code anyRequest().authenticated()} respondía <strong>403 Forbidden sin cuerpo</strong>,
+     * enmascarando el código real del error interno (500) ante el cliente y dificultando el
+     * diagnóstico (un fallo de base de datos se presentaba como si fuera un problema de
+     * autorización). Al retornar {@code false}, este filtro vuelve a validar la cookie
+     * {@code jwt} durante el dispatch ERROR, conserva el contexto de autenticación y permite
+     * que el mecanismo estándar de errores de Spring Boot entregue al cliente su código real
+     * con el cuerpo JSON estándar ({@code BasicErrorController}).</p>
+     *
+     * <p>Origen: incidente documentado el 2026-08-23 (Registro de anomalías de
+     * {@code ESTADO_PROYECTO.md}) — un DELETE con violación de clave foránea respondía 403
+     * vacío en lugar del error real; corrección definida en plan.md, sección PHA12, fila
+     * "Errores internos honestos" (decisión de Lino 2026-08-23; se descartó deliberadamente
+     * agregar {@code permitAll("/error")}, de modo que ninguna regla de autorización de
+     * {@code SecurityConfig} cambia y las peticiones sin cookie válida siguen recibiendo 403).
+     * La cookie JWT viaja intacta en el dispatch ERROR porque el contenedor reutiliza la misma
+     * solicitud.</p>
+     *
+     * @return siempre {@code false}: el filtro NO se omite en el dispatch de tipo ERROR
+     */
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        return false;
+    }
+
+    /**
      * Extrae el valor de la cookie "jwt" de la solicitud HTTP.
      *
      * @param request solicitud HTTP recibida
