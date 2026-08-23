@@ -39,11 +39,32 @@ export interface NotificacionUI {
  * conocidas de PHA04 (plan.md:368-370) reciben una etiqueta entendible; cualquier tipo
  * desconocido cae al fallback {@code tipo.toUpperCase()} (el tipo crudo ya viaja en
  * mayúsculas). Declarado como decisión no trivial en el Artifact PHA04TSK20-L01.</p>
+ *
+ * <p>Desde la recuperación de PHA09TSK05 (PHA12TSK05), incluye además los 9 tipos
+ * accionables del CHECK constraint V19, divididos por rol según
+ * {@code NotificacionService.listarPorUsuarioYRol}: los 2 tipos ADMIN
+ * ({@code PUBLICACION_PENDIENTE_APROBAR}, {@code DISPUTA_PENDIENTE_RESOLVER}) y los 7
+ * tipos USER ({@code RESPUESTA_USUARIO_PENDIENTE}, {@code PUBLICACION_APROBADA_RECHAZADA},
+ * {@code COMPRA_CONFIRMADA}, {@code ENVIO_MARCADO}, {@code ENTREGA_MARCADA},
+ * {@code DISPUTA_ABIERTA}, {@code DISPUTA_RESUELTA}). Los 3 tipos históricos de PHA04 se
+ * conservan para no romper la presentación de datos previos a V19.</p>
  */
 export const ETIQUETAS_TIPO: Record<string, string> = {
+  // Tipos históricos de PHA04 (avisos diarios/puntuales de transacción abierta).
   ENVIO_PENDIENTE_48H: 'Envío pendiente',
   COMPRA_PENDIENTE_DIARIA: 'Compra pendiente',
-  VENTA_POR_ENTREGAR_DIARIA: 'Venta por entregar'
+  VENTA_POR_ENTREGAR_DIARIA: 'Venta por entregar',
+  // Tipos ADMIN (moderación y disputas pendientes de acción administrativa).
+  PUBLICACION_PENDIENTE_APROBAR: 'Publicación por aprobar',
+  DISPUTA_PENDIENTE_RESOLVER: 'Disputa por resolver',
+  // Tipos USER (proceso compra/venta/envío/disputa).
+  RESPUESTA_USUARIO_PENDIENTE: 'Respuesta pendiente',
+  PUBLICACION_APROBADA_RECHAZADA: 'Moderación de publicación',
+  COMPRA_CONFIRMADA: 'Compra confirmada',
+  ENVIO_MARCADO: 'Envío marcado',
+  ENTREGA_MARCADA: 'Entrega marcada',
+  DISPUTA_ABIERTA: 'Disputa abierta',
+  DISPUTA_RESUELTA: 'Disputa resuelta'
 };
 
 /**
@@ -128,4 +149,115 @@ export async function cargarNotificaciones(url: string): Promise<NotificacionUI[
   // defensiva para no romper el render si el backend cambiara la forma de la respuesta.
   const data: unknown = await response.json();
   return Array.isArray(data) ? (data as NotificacionUI[]) : [];
+}
+
+/**
+ * Tipos USER cuyo destino depende del mensaje: el backend no indica el rol del destinatario
+ * dentro de la transacción, pero los textos emitidos por los servicios de dominio
+ * (PHA12TSK03) distinguen al comprador con "tu compra" y al vendedor con "tu venta".
+ *
+ * <p>Incluye {@code RESPUESTA_USUARIO_PENDIENTE} aunque hoy ningún servicio lo emita:
+ * figura en el filtro por rol de {@code NotificacionService.listarPorUsuarioYRol} y en el
+ * CHECK constraint V19, así que si aparece una notificación con ese tipo debe enrutarse por
+ * la misma regla de mensaje y no caer al fallback.</p>
+ */
+const TIPOS_USER_CON_TRANSACCION = new Set([
+  'RESPUESTA_USUARIO_PENDIENTE',
+  'COMPRA_CONFIRMADA',
+  'ENVIO_MARCADO',
+  'ENTREGA_MARCADA',
+  'DISPUTA_ABIERTA',
+  'DISPUTA_RESUELTA'
+]);
+
+/**
+ * Resuelve la ruta de destino a la que navega una notificación accionable al hacer click.
+ *
+ * <p>Mapeo completo (decisión declarada en el Artifact PHA12TSK05-L01, trazado a los
+ * destinos del criterio original de PHA09TSK05 y a las rutas existentes del frontend):</p>
+ * <ul>
+ *   <li>ADMIN — moderación: {@code PUBLICACION_PENDIENTE_APROBAR} → {@code /admin/moderacion}.</li>
+ *   <li>ADMIN — disputas: {@code DISPUTA_PENDIENTE_RESOLVER} → {@code /admin/disputas}.</li>
+ *   <li>USER sin transacción: {@code PUBLICACION_APROBADA_RECHAZADA} →
+ *       {@code /mis-publicaciones} (el backend la emite con {@code transaccionId: null}).</li>
+ *   <li>USER con transacción ({@code COMPRA_CONFIRMADA}, {@code ENVIO_MARCADO},
+ *       {@code ENTREGA_MARCADA}, {@code DISPUTA_ABIERTA}, {@code DISPUTA_RESUELTA},
+ *       {@code RESPUESTA_USUARIO_PENDIENTE}): el mensaje decide el lado de la transacción —
+ *       contiene "tu compra" → {@code /compras/{transaccionId}}; contiene "tu venta" →
+ *       {@code /ventas/{transaccionId}} (textos reales de PHA12TSK03, p. ej.
+ *       "El vendedor marcó tu compra #N como enviada" vs "Marcaste tu venta #N como enviada").</li>
+ * </ul>
+ *
+ * <p>Fallback defensivo: devuelve {@code null} para tipos desconocidos, para tipos USER
+ * con transacción sin {@code transaccionId} o cuando el mensaje no matchea ninguna de las
+ * dos expresiones — la fila se muestra como texto plano, nunca como un link roto. El
+ * matching es insensible a mayúsculas/minúsculas por robustez ante cambios de estilo del
+ * copy en el backend.</p>
+ *
+ * @param tipo categoría estable del aviso (contrato NotificacionResponseDto)
+ * @param transaccionId ID de la transacción asociada (nullable)
+ * @param mensaje contenido literal del aviso emitido por el backend
+ * @returns ruta interna navegable, o {@code null} si no hay destino determinable
+ */
+export function rutaDestino(
+  tipo: string,
+  transaccionId: number | null,
+  mensaje: string
+): string | null {
+  if (tipo === 'PUBLICACION_PENDIENTE_APROBAR') {
+    return '/admin/moderacion';
+  }
+  if (tipo === 'DISPUTA_PENDIENTE_RESOLVER') {
+    return '/admin/disputas';
+  }
+  if (tipo === 'PUBLICACION_APROBADA_RECHAZADA') {
+    return '/mis-publicaciones';
+  }
+  if (TIPOS_USER_CON_TRANSACCION.has(tipo)) {
+    if (transaccionId === null) {
+      return null;
+    }
+    const mensajeNormalizado = mensaje.toLowerCase();
+    if (mensajeNormalizado.includes('tu compra')) {
+      return `/compras/${transaccionId}`;
+    }
+    if (mensajeNormalizado.includes('tu venta')) {
+      return `/ventas/${transaccionId}`;
+    }
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Marca una notificación como leída contra el contrato real
+ * {@code PATCH /notificaciones/{id}/leer} (PHA12TSK04) con la cookie httpOnly:
+ * {@code credentials: 'include'}. La operación es idempotente en el backend (200 con el DTO
+ * actualizado incluso si ya estaba leída) y responde 403 si la notificación pertenece a otro
+ * usuario o 404 si no existe, siempre con JSON {@code {"mensaje"}}.
+ *
+ * <p>Espeja exactamente el manejo de errores de {@link cargarNotificaciones}: respuesta
+ * HTTP no-ok → {@link ErrorApiNotificaciones} con el {@code mensaje} del backend o un
+ * fallback con el código; fallo de red → propaga el error original de fetch para que el
+ * llamador decida cómo reportarlo.</p>
+ *
+ * @param url endpoint completo de marcado (base + `/notificaciones/{id}/leer`)
+ * @returns el DTO actualizado de la notificación (contrato 200 del endpoint)
+ * @throws ErrorApiNotificaciones si la respuesta HTTP no es 200 (con el {@code mensaje} del
+ *         backend o fallback con código HTTP), o el error de red original si fetch rechaza
+ */
+export async function marcarComoLeida(url: string): Promise<NotificacionUI> {
+  const response = await fetch(url, {
+    method: 'PATCH',
+    credentials: 'include'
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    const mensaje =
+      errorData?.mensaje || `Error al marcar la notificación como leída (código ${response.status})`;
+    throw new ErrorApiNotificaciones(mensaje, response.status);
+  }
+
+  return (await response.json()) as NotificacionUI;
 }

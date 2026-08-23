@@ -1,6 +1,14 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PanelCentroNotificaciones, { NotificacionUI } from './PanelCentroNotificaciones';
+
+// Mock de next/navigation para las notificaciones accionables (PHA12TSK05): el componente
+// usa useRouter().push SOLO después de un PATCH exitoso (decisión 4 de PHA09TSK05-L01).
+// Mismo patrón top-level de auth.test.tsx para evitar warnings de vi.mock anidado.
+const mockPush = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush })
+}));
 
 /**
  * @file PanelCentroNotificaciones.test.tsx
@@ -26,6 +34,11 @@ import PanelCentroNotificaciones, { NotificacionUI } from './PanelCentroNotifica
  *    de window), además del fetch al montar.
  * 10. Higiene de listeners: el listener de `focus` se remueve en unmount (no fetch tras
  *     desmontar el componente).
+ * 11-14. (PHA12TSK05, recuperación del incidente 2026-08-23) Notificaciones accionables:
+ *     (a) ADMIN ve moderación/disputas como links a su gestión; (b) USER ve compra/venta/
+ *     envío/disputa como links a detalle según "tu compra"/"tu venta" del mensaje;
+ *     (c) click marca leída vía PATCH y navega (PATCH antes que push); (d) botón
+ *     "Marcar como leída" hace PATCH sin navegar.
  */
 
 /** URL base fija del backend para las aserciones de fetch. */
@@ -255,5 +268,188 @@ describe('PanelCentroNotificaciones (PHA04TSK20)', () => {
 
     // Si el listener no se limpiara, un focus posterior dispararía una segunda petición.
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PanelCentroNotificaciones — notificaciones accionables (PHA12TSK05)', () => {
+  const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+  /**
+   * Construye un fetch simulado que responde el GET inicial con la lista dada y cualquier
+   * PATCH (marcar como leída) con 200 y DTO vacío — suficiente para los flujos del criterio
+   * (a)-(d), que validan la LLAMADA al PATCH y sus efectos locales, no el cuerpo devuelto
+   * (la actualización del badge es local, decisión declarada en el Artifact).
+   *
+   * @param items notificaciones que devuelve el GET de montaje
+   * @returns mock de fetch que despacha por método HTTP
+   */
+  function fetchGetYPatch(items: NotificacionUI[]) {
+    // vi.fn() sin firma concreta (patrón de los tests previos del archivo): asignable a
+    // global.fetch sin casts; el despacho por método HTTP vive en mockImplementation.
+    return vi.fn().mockImplementation((url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+      }
+      return Promise.resolve(okResponse(items));
+    });
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockPush.mockClear();
+    process.env.NEXT_PUBLIC_API_URL = BASE;
+  });
+
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
+  });
+
+  it('(a) ADMIN ve notificaciones de moderación/disputas como links a su gestión', async () => {
+    const notificaciones = [
+      notificacionBase({
+        id: 1,
+        tipo: 'PUBLICACION_PENDIENTE_APROBAR',
+        mensaje: 'Publicación #12 pendiente de aprobación',
+        transaccionId: null
+      }),
+      notificacionBase({
+        id: 2,
+        tipo: 'DISPUTA_PENDIENTE_RESOLVER',
+        mensaje: 'Disputa abierta en la transacción #7; pendiente de resolución administrativa',
+        transaccionId: 7
+      })
+    ];
+    const fetchMock = fetchGetYPatch(notificaciones);
+    global.fetch = fetchMock;
+
+    render(<PanelCentroNotificaciones />);
+
+    await screen.findByText('Publicación #12 pendiente de aprobación');
+    // Ambas notificaciones ADMIN son links navegables.
+    const links = screen.getAllByRole('link');
+    expect(links).toHaveLength(2);
+
+    // La fila de moderación navega a la gestión de moderación del admin.
+    fireEvent.click(within(links[0]).getByText(/pendiente de aprobación/i));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/admin/moderacion'));
+
+    // La fila de disputas navega al panel de disputas del admin.
+    fireEvent.click(within(links[1]).getByText(/resolución administrativa/i));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/admin/disputas'));
+  });
+
+  it('(b) USER ve links a detalle de compra/venta/envío/disputa según el mensaje ("tu compra"/"tu venta")', async () => {
+    const notificaciones = [
+      notificacionBase({ id: 1, tipo: 'COMPRA_CONFIRMADA', mensaje: 'Confirmaste la recepción de tu compra #41', transaccionId: 41 }),
+      notificacionBase({ id: 2, tipo: 'ENVIO_MARCADO', mensaje: 'Marcaste tu venta #41 como enviada', transaccionId: 41 }),
+      notificacionBase({ id: 3, tipo: 'ENTREGA_MARCADA', mensaje: 'El vendedor marcó tu compra #43 como entregada; confirma la recepción dentro de las próximas 48 horas', transaccionId: 43 }),
+      notificacionBase({ id: 4, tipo: 'DISPUTA_ABIERTA', mensaje: 'Abriste una disputa sobre tu compra #42; los fondos quedan congelados hasta la resolución', transaccionId: 42 }),
+      notificacionBase({ id: 5, tipo: 'DISPUTA_RESUELTA', mensaje: 'Se resolvió la disputa de tu venta #42: fondos devueltos al comprador', transaccionId: 42 })
+    ];
+    const fetchMock = fetchGetYPatch(notificaciones);
+    global.fetch = fetchMock;
+
+    render(<PanelCentroNotificaciones />);
+
+    await screen.findByText('Confirmaste la recepción de tu compra #41');
+    // Las 5 notificaciones USER accionables son links navegables.
+    expect(screen.getAllByRole('link')).toHaveLength(5);
+
+    // Mensaje dirigido al comprador ("tu compra") → detalle en /compras/{transaccionId}.
+    const filaCompra = screen.getByText(/Abriste una disputa sobre tu compra/).closest('li');
+    fireEvent.click(within(filaCompra as HTMLElement).getByRole('link'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/compras/42'));
+
+    // Mensaje dirigido al vendedor ("tu venta") → detalle en /ventas/{transaccionId}.
+    const filaVenta = screen.getByText(/Se resolvió la disputa de tu venta/).closest('li');
+    fireEvent.click(within(filaVenta as HTMLElement).getByRole('link'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/ventas/42'));
+  });
+
+  it('(c) click en la notificación marca leida vía PATCH y navega al destino (PATCH antes que push)', async () => {
+    const compra = notificacionBase({ id: 5, tipo: 'COMPRA_CONFIRMADA', mensaje: 'Confirmaste la recepción de tu compra #44', transaccionId: 44 });
+    const envio = notificacionBase({ id: 6, tipo: 'ENVIO_MARCADO', mensaje: 'El vendedor marcó tu compra #45 como enviada', transaccionId: 45 });
+    const fetchMock = vi.fn().mockImplementation((url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+      }
+      return Promise.resolve(okResponse([compra, envio]));
+    });
+    global.fetch = fetchMock;
+
+    render(<PanelCentroNotificaciones />);
+
+    // Estado inicial: sin leer → badge "No leída" visible en AMBAS filas.
+    expect((await screen.findAllByText('No leída')).length).toBe(2);
+
+    // Click con mouse sobre la primera fila: await PATCH → estado local → router.push.
+    const filaCompra = screen.getByText(/recepción de tu compra #44/).closest('li');
+    fireEvent.click(within(filaCompra as HTMLElement).getByRole('link'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(`${BASE}/notificaciones/5/leer`, {
+        method: 'PATCH',
+        credentials: 'include'
+      });
+    });
+
+    // Actualización local SIN refetch: el badge de ESA fila desaparece y solo hubo 1 GET.
+    await waitFor(() => {
+      expect(within(filaCompra as HTMLElement).queryByText('No leída')).not.toBeInTheDocument();
+    });
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method !== 'PATCH')).toHaveLength(1);
+    expect(mockPush).toHaveBeenCalledWith('/compras/44');
+
+    // Orden garantizado: el PATCH se emitió ANTES de router.push (decisión 4 PHA09TSK05-L01).
+    const indicePatch = fetchMock.mock.calls.findIndex(([, init]) => init?.method === 'PATCH');
+    expect(fetchMock.mock.invocationCallOrder[indicePatch]).toBeLessThan(mockPush.mock.invocationCallOrder[0]);
+
+    // Accesibilidad teclado: Enter sobre otra fila dispara el mismo flujo completo.
+    const filaEnvio = screen.getByText(/marcó tu compra #45 como enviada/).closest('li');
+    fireEvent.keyDown(within(filaEnvio as HTMLElement).getByRole('link'), { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(`${BASE}/notificaciones/6/leer`, {
+        method: 'PATCH',
+        credentials: 'include'
+      });
+    });
+    await waitFor(() => {
+      expect(within(filaEnvio as HTMLElement).queryByText('No leída')).not.toBeInTheDocument();
+    });
+    expect(mockPush).toHaveBeenLastCalledWith('/compras/45');
+  });
+
+  it('(d) el botón "Marcar como leída" hace PATCH sin navegar ni disparar el click del contenedor', async () => {
+    const entrega = notificacionBase({
+      id: 9,
+      tipo: 'ENTREGA_MARCADA',
+      mensaje: 'El vendedor marcó tu compra #46 como entregada; confirma la recepción dentro de las próximas 48 horas',
+      transaccionId: 46
+    });
+    const fetchMock = fetchGetYPatch([entrega]);
+    global.fetch = fetchMock;
+
+    render(<PanelCentroNotificaciones />);
+
+    expect(await screen.findByText('No leída')).toBeInTheDocument();
+
+    // El botón vive DENTRO del contenedor clickable: stopPropagation debe impedir que el
+    // click burbujee hasta el div[role="link"] (que navegaría tras el PATCH).
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como leída' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(`${BASE}/notificaciones/9/leer`, {
+        method: 'PATCH',
+        credentials: 'include'
+      });
+    });
+
+    // Badge retirado por actualización local, sin refetch (1 solo GET, el del montaje).
+    await waitFor(() => expect(screen.queryByText('No leída')).not.toBeInTheDocument());
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method !== 'PATCH')).toHaveLength(1);
+
+    // Sin navegación: el botón solo marca leída (decisión 5 de PHA09TSK05-L01).
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
