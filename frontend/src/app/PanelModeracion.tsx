@@ -1,55 +1,41 @@
-'use client';
+﻿'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { formatearPrecioSoles } from './publicaciones/publicaciones-utils';
 
 /**
- * Interface para representar una publicación en lista de moderación.
+ * Publicación pendiente adaptada desde el DTO real y el árbol de categorías.
  */
 export interface PublicacionPendiente {
+  /** ID real usado por la ruta de moderación. */
   id: number;
+  /** ID del vendedor recibido por el DTO, no mostrado como decoración. */
   usuarioId: number;
+  /** Nombre resuelto mediante el ID contra `GET /categorias`. */
   categoriaNombre: string;
+  /** Nombre resuelto dentro de la categoría padre real. */
   subcategoriaNombre: string;
-  precio: number; // En centavos
+  /** Precio entero en centavos. */
+  precio: number;
+  /** Unidades disponibles informadas por backend. */
   stock: number;
+  /** Descripción literal de la publicación. */
   descripcion: string;
+  /** Correo literal del vendedor propietario de la publicación. */
+  usuarioEmail: string;
+  /** Nombre de archivo de imagen del DTO backend, o `null` cuando no existe una imagen. */
+  imagenFilename: string | null;
+  /** Estado remoto; debe corresponder a pendiente de revisión. */
   estado: string;
 }
 
 /**
- * Interface de props para PanelModeracion.
+ * Props para PanelModeracion.
  */
 export interface PanelModeracionProps {
-  /** Lista opcional de publicaciones a moderar (por defecto usa PUBLICACIONES_PENDIENTES_MOCK) */
-  publicacionesIniciales?: PublicacionPendiente[];
+  /** Lista real de publicaciones a moderar; vacía representa el estado vacío. */
+  publicacionesIniciales: PublicacionPendiente[];
 }
-
-/**
- * Datos estáticos temporales para la lista de publicaciones pendientes de revisión.
- * TODO: reemplazar con GET /publicaciones?estado=PENDIENTE_REVISION real cuando exista esa tarea de API — ver PHA02TSK13, riesgo declarado.
- */
-const PUBLICACIONES_PENDIENTES_MOCK: PublicacionPendiente[] = [
-  {
-    id: 1,
-    usuarioId: 10,
-    categoriaNombre: 'Electrónica',
-    subcategoriaNombre: 'Smartphones',
-    precio: 25000, // $250.00
-    stock: 3,
-    descripcion: 'Smartphone desbloqueado de alta gama en excelente estado.',
-    estado: 'PENDIENTE_REVISION'
-  },
-  {
-    id: 2,
-    usuarioId: 11,
-    categoriaNombre: 'Hogar',
-    subcategoriaNombre: 'Muebles',
-    precio: 15000, // $150.00
-    stock: 1,
-    descripcion: 'Silla ergonómica para oficina de color negro.',
-    estado: 'PENDIENTE_REVISION'
-  }
-];
 
 /**
  * Componente PanelModeracion (PHA02TSK13).
@@ -59,28 +45,35 @@ const PUBLICACIONES_PENDIENTES_MOCK: PublicacionPendiente[] = [
  * @returns Elemento JSX con el panel de administración para moderación de publicaciones
  */
 export default function PanelModeracion({ publicacionesIniciales }: PanelModeracionProps) {
-  const [publicaciones, setPublicaciones] = useState<PublicacionPendiente[]>(
-    publicacionesIniciales || PUBLICACIONES_PENDIENTES_MOCK
-  );
+  const [publicaciones, setPublicaciones] = useState<PublicacionPendiente[]>(publicacionesIniciales);
 
   const [motivos, setMotivos] = useState<{ [pubId: number]: string }>({});
   const [errors, setErrors] = useState<{ [pubId: number]: string }>({});
   const [generalMessage, setGeneralMessage] = useState<{ text: string; isError: boolean } | null>(null);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
+  const mutacionEnCurso = useRef(false);
 
   /**
    * Actualiza el motivo ingresado por el administrador para una publicación específica.
+   *
+   * @param pubId ID real de la publicación
+   * @param value texto actual del control
+   * @returns nada; actualiza estado local
    */
-  const handleMotivoChange = (pubId: number, value: string) => {
+  const handleMotivoChange = (pubId: number, value: string): void => {
     setMotivos((prev) => ({ ...prev, [pubId]: value }));
     setErrors((prev) => ({ ...prev, [pubId]: '' }));
   };
 
   /**
-   * Ejecuta la moderaciones enviando la solicitud PATCH /publicaciones/{id}/moderar al backend.
+   * Ejecuta la moderación enviando PATCH /publicaciones/{id}/moderar al backend.
    * Valida en el cliente que si la acción es "rechazar" o "solicitar-cambios", exista un motivo no vacío.
+   *
+   * @param pubId ID real de la publicación
+   * @param accion transición administrativa solicitada
+   * @returns promesa completada al actualizar la lista
    */
-  const handleModerar = async (pubId: number, accion: 'aprobar' | 'solicitar-cambios' | 'rechazar') => {
+  const handleModerar = async (pubId: number, accion: 'aprobar' | 'solicitar-cambios' | 'rechazar'): Promise<void> => {
     setErrors((prev) => ({ ...prev, [pubId]: '' }));
     setGeneralMessage(null);
 
@@ -92,6 +85,8 @@ export default function PanelModeracion({ publicacionesIniciales }: PanelModerac
       return;
     }
 
+    if (mutacionEnCurso.current) return;
+    mutacionEnCurso.current = true;
     setSubmittingId(pubId);
 
     const payload: { accion: string; motivo?: string } = { accion };
@@ -126,9 +121,10 @@ export default function PanelModeracion({ publicacionesIniciales }: PanelModerac
         // Remover la publicación moderada de la lista
         setPublicaciones((prev) => prev.filter((p) => p.id !== pubId));
       }
-    } catch (err) {
+    } catch {
       setGeneralMessage({ text: 'Error de red al conectar con el servidor', isError: true });
     } finally {
+      mutacionEnCurso.current = false;
       setSubmittingId(null);
     }
   };
@@ -171,15 +167,25 @@ export default function PanelModeracion({ publicacionesIniciales }: PanelModerac
                 </div>
                 <div className="text-right">
                   <div className="text-lg font-bold font-mono text-[#0F172A]">
-                    ${(pub.precio / 100).toFixed(2)} USD
+                    {formatearPrecioSoles(pub.precio)}
                   </div>
                   <div className="text-xs font-mono text-slate-500">Stock: {pub.stock} unidades</div>
                 </div>
               </div>
 
+              <div className="relative h-48 w-full overflow-hidden">
+                {pub.imagenFilename ? (
+                  <img className="h-full w-full object-cover" alt={pub.descripcion} src={`/imagenes/publicaciones/${pub.imagenFilename}`} />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center bg-surface-container-highest text-on-surface-variant">Sin imagen</div>
+                )}
+              </div>
+
               <p className="text-sm text-slate-700 bg-slate-50 p-3 border border-slate-100 rounded">
                 {pub.descripcion}
               </p>
+
+              <p className="text-sm text-slate-600">{pub.usuarioEmail}</p>
 
               {/* Campo Motivo */}
               <div>
@@ -241,3 +247,4 @@ export default function PanelModeracion({ publicacionesIniciales }: PanelModerac
     </div>
   );
 }
+

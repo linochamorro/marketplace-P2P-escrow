@@ -138,6 +138,15 @@ public class Notificacion {
     }
 
     /**
+     * Marks the notification as read or unread (PHA09TSK05: "Marcar como leída").
+     *
+     * @param leida nuevo valor del marcador de lectura persistido en la columna {@code leida}
+     */
+    public void setLeida(boolean leida) {
+        this.leida = leida;
+    }
+
+    /**
      * Gets the stable notification category.
      *
      * @return notification type

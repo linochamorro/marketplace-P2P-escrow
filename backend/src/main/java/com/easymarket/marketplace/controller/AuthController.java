@@ -25,7 +25,7 @@ import java.time.Duration;
 import java.util.Map;
 
 /**
- * Controller REST responsable de los endpoints de autenticación (login y registro) de EasyMarket.
+ * Controller REST responsable de los endpoints de autenticación (login, registro y logout) de EasyMarket.
  *
  * <p>Aplica las reglas de transporte de sesión y registro de {@code plan.md} y las Stories 0 y 0b de {@code spec.md}:
  * <ul>
@@ -34,6 +34,8 @@ import java.util.Map;
  *   <li>Resolución de IP resiliente priorizando {@code X-Real-IP} (sanitizado por proxies de borde
  *       como Railway/Cloudflare) y como alternativa el primer token de {@code X-Forwarded-For}.</li>
  *   <li>Respuesta con cookie HTTP {@code httpOnly; Secure; SameSite=None} para el token JWT en login.</li>
+ *   <li>Cierre de sesión devolviendo la cookie {@code jwt} expirada ({@code Max-Age=0}) sin
+ *       invalidación server-side del token (PHA07TSK02).</li>
  *   <li>Rechazo con código HTTP 401 y mensaje genérico en caso de credenciales erróneas.</li>
  *   <li>Rechazo con código HTTP 429 cuando la combinación email + IP supera el número de intentos.</li>
  * </ul>
@@ -140,6 +142,35 @@ public class AuthController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
                 .body(Map.of("mensaje", "Inicio de sesión exitoso"));
+    }
+
+    /**
+     * Endpoint REST {@code POST /auth/logout} para cerrar la sesión del usuario (PHA07TSK02;
+     * plan.md, sección Autenticación — fila Logout — y Fase 7 — fila Logout).
+     *
+     * <p>Devuelve una cookie {@code jwt} expirada ({@code Max-Age=0}, {@code Path=/},
+     * {@code HttpOnly}, {@code Secure}, {@code SameSite=None}) para que el navegador elimine
+     * la sesión. No existe invalidación server-side del JWT (exclusión explícita de spec.md,
+     * Story 0b, aceptada en plan.md), por lo que la operación es idempotente: funciona con o
+     * sin cookie previa y con token válido o inválido. La ruta permanece pública por el
+     * {@code permitAll} existente de {@code /auth/**}; no se modifica {@code SecurityConfig}.</p>
+     *
+     * @return {@link ResponseEntity} 200 OK con la cabecera {@code Set-Cookie} de expiración
+     *         y el cuerpo {@code {"mensaje": "Sesión cerrada"}}
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, String>> logout() {
+        ResponseCookie jwtCookieExpirada = ResponseCookie.from("jwt", "")
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .sameSite("None")
+                .maxAge(Duration.ZERO)
+                .build();
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, jwtCookieExpirada.toString())
+                .body(Map.of("mensaje", "Sesión cerrada"));
     }
 
     /**

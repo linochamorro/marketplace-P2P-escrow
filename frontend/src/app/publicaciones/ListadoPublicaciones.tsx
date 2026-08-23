@@ -73,7 +73,8 @@ export default function ListadoPublicaciones({
   useEffect(() => {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
     /**
-     * Carga en el montaje las categorías de selects y el listado inicial sin filtros.
+     * Carga en el montaje las categorías de selects, el listado inicial sin filtros
+     * y evita llamadas síncronas a setState dentro del efecto (react-hooks/set-state-in-effect).
      *
      * @returns promesa que resuelve tras actualizar ambas lecturas independientes
      */
@@ -84,9 +85,9 @@ export default function ListadoPublicaciones({
       } catch (error) {
         setErrorMensaje(error instanceof Error ? error.message : 'Error de red al conectar con el servidor');
       }
+      await consultarPublicaciones(new URLSearchParams());
     };
     void cargarInicial();
-    void consultarPublicaciones(new URLSearchParams());
   }, [consultarPublicaciones, obtenerCategorias]);
 
   /**

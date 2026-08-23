@@ -13,6 +13,7 @@ import com.easymarket.marketplace.model.Publicacion;
  * @param categoriaId ID de la categoría raíz
  * @param subcategoriaId ID de la subcategoría
  * @param usuarioId ID del usuario vendedor propietario de la publicación
+ * @param usuarioEmail email del vendedor propietario (PHA09TSK02), mostrado en las cards del marketplace
  * @param imagenFilename nombre de archivo de imagen (sin prefijo de URL); puede ser {@code null}
  */
 public record PublicacionResponseDto(
@@ -24,6 +25,7 @@ public record PublicacionResponseDto(
         Long categoriaId,
         Long subcategoriaId,
         Long usuarioId,
+        String usuarioEmail,
         String imagenFilename
 ) {
     /**
@@ -42,6 +44,7 @@ public record PublicacionResponseDto(
                 publicacion.getCategoria().getId(),
                 publicacion.getSubcategoria().getId(),
                 publicacion.getUsuario().getId(),
+                publicacion.getUsuario().getEmail(),
                 publicacion.getImagenFilename()
         );
     }

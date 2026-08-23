@@ -15,10 +15,17 @@ spring:
     driver-class-name: org.postgresql.Driver
 
   flyway:
+    # En Spring Boot, definir spring.flyway.locations en un perfil REEMPLAZA el valor base
+    # (no lo fusiona). Para que el perfil dev siga aplicando V1..V17, se listan AMBAS carpetas:
+    # las migraciones versionadas estándar y la ubicación exclusiva de desarrollo con el seed
+    # repeatable R__seed_demo.sql (PHA06TSK08; plan.md, "Datos demostrativos").
+    # application-prod.yml NO define esta propiedad, por lo que prod hereda el valor base
+    # (classpath:db/migration) y el seed dev nunca se ejecuta en producción.
+    locations: classpath:db/migration,classpath:db/dev
     placeholders:
       admin_email: ${ADMIN_EMAIL:admin@easymarket.com}
       # Hash BCrypt de 'AdminPass123!' — SOLO para desarrollo local en Docker, jamás usar en producción
-      admin_password_hash: ${ADMIN_PASSWORD_HASH:$2a$10$R9h/cIPz0gi.URNNXRkh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW}
+      admin_password_hash: ${ADMIN_PASSWORD_HASH:$2a$10$i1Cip4VxnE7BRiktfByGIO/C7yiPApOkscdd7guXQETMUjmAXrfpS}
 
   jpa:
     show-sql: true          # SQL visible en consola solo en dev

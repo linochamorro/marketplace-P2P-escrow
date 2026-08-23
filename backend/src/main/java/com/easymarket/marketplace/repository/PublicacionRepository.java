@@ -50,6 +50,19 @@ public interface PublicacionRepository extends JpaRepository<Publicacion, Long> 
     List<Publicacion> findByEstado(EstadoPublicacion estado);
 
     /**
+     * Cuenta las publicaciones que se encuentran en el estado indicado.
+     *
+     * <p>Consulta derivada de lectura usada por {@code GET /admin/tablero} (PHA06TSK07; plan.md,
+     * "Tablero administrativo", "conteo de publicaciones pendientes"): el controller la invoca
+     * con {@link EstadoPublicacion#PENDIENTE_REVISION}. La agregación es de lectura pura; no
+     * modifica el estado ni el catálogo.</p>
+     *
+     * @param estado estado de publicación a contar
+     * @return número de publicaciones en ese estado, incluyendo cero cuando no hay ninguna
+     */
+    long countByEstado(EstadoPublicacion estado);
+
+    /**
      * Decrementa el stock de una publicación en 1 de forma atómica y condicional, solo si queda
      * al menos una unidad disponible (stock &gt;= 1).
      *

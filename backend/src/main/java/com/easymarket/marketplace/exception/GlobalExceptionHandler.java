@@ -196,6 +196,24 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Maneja intentos de eliminar una publicación cuyo estado no lo permite (solo RECHAZADA, Story 3).
+     *
+     * <p>La eliminación de una publicación en cualquier estado distinto de {@code RECHAZADA} (por
+     * ejemplo, APROBADA o PENDIENTE_REVISION) es un conflicto de dominio: el vendedor solo puede
+     * eliminar lo que fue rechazado por moderación (spec.md, Story 3; plan.md). Se traduce a
+     * HTTP 409 Conflict con el mensaje literal de la excepción.</p>
+     *
+     * @param ex excepción de publicación no eliminable
+     * @return {@link ResponseEntity} con código HTTP 409 Conflict
+     */
+    @ExceptionHandler(PublicacionNoEliminableException.class)
+    public ResponseEntity<Map<String, String>> handlePublicacionNoEliminable(PublicacionNoEliminableException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
      * Maneja la omisión del motivo en transiciones de estado de publicación que lo exigen.
      *
      * @param ex excepción de motivo requerido
@@ -218,6 +236,24 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleNoEsElPropietario(NoEsElPropietarioException ex) {
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja el intento de eliminar una publicación que tiene al menos una transacción asociada.
+     *
+     * <p>Decisión de Lino 2026-08-23 (plan.md, "PHA12 — Eliminación de publicaciones con
+     * transacciones asociadas"): la publicación NO se elimina y el cliente recibe un conflicto
+     * explícito con el mensaje de dominio, en lugar del error interno enmascarado que producía
+     * la FK {@code fk_transacciones_publicacion} (V7) al fallar en el commit.</p>
+     *
+     * @param ex excepción de publicación con transacciones asociadas
+     * @return {@link ResponseEntity} con código HTTP 409 Conflict y el mensaje en el cuerpo JSON
+     */
+    @ExceptionHandler(PublicacionConTransaccionesException.class)
+    public ResponseEntity<Map<String, String>> handlePublicacionConTransacciones(PublicacionConTransaccionesException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
                 .body(Map.of("mensaje", ex.getMessage()));
     }
 

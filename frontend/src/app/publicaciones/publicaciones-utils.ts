@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Modelos, transporte y conversiones de presentación para el listado de publicaciones
  * de Story 11 (PHA05TSK04).
  *
@@ -43,6 +43,10 @@ export interface PublicacionListado {
   subcategoriaId: number;
   /** Identificador del vendedor dueño de la publicación. */
   usuarioId: number;
+  /** Email del vendedor dueño de la publicación. */
+  usuarioEmail: string;
+  /** Nombre del archivo de imagen del DTO backend (sin prefijo de URL), o `null` cuando la publicación no tiene imagen. */
+  imagenFilename: string | null;
 }
 
 /** Valores autorizados por `OrdenListadoPublicaciones` para el query `orden`. */
@@ -106,6 +110,17 @@ export function solesACentavos(soles: string): string | null {
 export function formatearPrecioSoles(centavos: number): string {
   const digitos = String(centavos).padStart(3, '0');
   return `S/ ${digitos.slice(0, -2)}.${digitos.slice(-2)}`;
+}
+
+/**
+ * Convierte centavos enteros a texto decimal editable sin división ni punto flotante.
+ *
+ * @param centavos monto entero recibido del backend
+ * @returns texto sin prefijo, con exactamente dos decimales
+ */
+export function centavosATextoSoles(centavos: number): string {
+  const digitos = String(centavos).padStart(3, '0');
+  return `${digitos.slice(0, -2)}.${digitos.slice(-2)}`;
 }
 
 /**
@@ -183,3 +198,26 @@ export async function cargarPublicaciones(url: string): Promise<PublicacionLista
   }
   return data as PublicacionListado[];
 }
+
+/**
+ * Carga una publicación aprobada desde el endpoint de detalle con la cookie httpOnly.
+ *
+ * @param url endpoint completo de `GET /publicaciones/{id}`
+ * @returns publicación autorizada devuelta por el backend
+ * @throws ErrorApiPublicaciones si la respuesta no es exitosa o no contiene un objeto
+ */
+export async function cargarPublicacionDetalle(url: string): Promise<PublicacionListado> {
+  const response = await fetch(url, { method: 'GET', credentials: 'include' });
+  if (!response.ok) {
+    throw new ErrorApiPublicaciones(
+      await mensajeError(response, `Error al cargar la publicación (código ${response.status})`),
+      response.status
+    );
+  }
+  const data: unknown = await response.json();
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    throw new ErrorApiPublicaciones('La respuesta del servidor no tiene el formato esperado', response.status);
+  }
+  return data as PublicacionListado;
+}
+

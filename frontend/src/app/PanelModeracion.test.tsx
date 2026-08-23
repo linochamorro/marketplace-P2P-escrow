@@ -1,6 +1,9 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+﻿import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import PanelModeracion from './PanelModeracion';
+
+/** Publicación realista inyectada; el componente ya no contiene mocks internos. */
+const PUBLICACIONES = [{ id: 1, usuarioId: 10, categoriaNombre: 'Electrónica', subcategoriaNombre: 'Smartphones', precio: 25000, stock: 3, descripcion: 'Smartphone usado', usuarioEmail: 'vendedor@example.com', imagenFilename: '', estado: 'PENDIENTE_REVISION' }];
 
 /**
  * @file PanelModeracion.test.tsx
@@ -28,7 +31,7 @@ describe('PanelModeracion (PHA02TSK13)', () => {
     const fetchMock = vi.fn();
     global.fetch = fetchMock;
 
-    render(<PanelModeracion />);
+    render(<PanelModeracion publicacionesIniciales={PUBLICACIONES} />);
 
     // Seleccionamos la primera publicación mock
     const rechazarBtn = screen.getAllByRole('button', { name: /rechazar/i })[0];
@@ -50,7 +53,7 @@ describe('PanelModeracion (PHA02TSK13)', () => {
     });
     global.fetch = fetchMock;
 
-    render(<PanelModeracion />);
+    render(<PanelModeracion publicacionesIniciales={PUBLICACIONES} />);
 
     const aprobarBtn = screen.getAllByRole('button', { name: /aprobar/i })[0];
     fireEvent.click(aprobarBtn);
@@ -82,7 +85,7 @@ describe('PanelModeracion (PHA02TSK13)', () => {
     });
     global.fetch = fetchMock;
 
-    render(<PanelModeracion />);
+    render(<PanelModeracion publicacionesIniciales={PUBLICACIONES} />);
 
     const motivoInput = screen.getAllByLabelText(/motivo/i)[0];
     fireEvent.change(motivoInput, { target: { value: 'Producto prohibido por políticas de seguridad' } });
@@ -117,11 +120,24 @@ describe('PanelModeracion (PHA02TSK13)', () => {
     });
     global.fetch = fetchMock;
 
-    render(<PanelModeracion />);
+    render(<PanelModeracion publicacionesIniciales={PUBLICACIONES} />);
 
     const aprobarBtn = screen.getAllByRole('button', { name: /aprobar/i })[0];
     fireEvent.click(aprobarBtn);
 
     expect(await screen.findByText(/esta publicación ya fue moderada/i)).toBeInTheDocument();
   });
+
+  it('muestra la imagen y el correo literal del vendedor de una publicación pendiente', () => {
+    render(<PanelModeracion publicacionesIniciales={[{
+      ...PUBLICACIONES[0],
+      descripcion: 'Cámara analógica restaurada',
+      imagenFilename: 'camara-analogica.jpg',
+      usuarioEmail: 'vendedora@example.com',
+    }]} />);
+
+    expect(screen.getByRole('img', { name: 'Cámara analógica restaurada' })).toHaveAttribute('src', '/imagenes/publicaciones/camara-analogica.jpg');
+    expect(screen.getByText('vendedora@example.com')).toBeInTheDocument();
+  });
 });
+

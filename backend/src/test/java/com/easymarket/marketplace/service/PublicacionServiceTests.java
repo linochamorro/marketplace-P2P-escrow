@@ -6,7 +6,7 @@ import com.easymarket.marketplace.exception.EstadoPublicacionNoEditableException
 import com.easymarket.marketplace.exception.MotivoRequeridoException;
 import com.easymarket.marketplace.exception.NoEsElPropietarioException;
 import com.easymarket.marketplace.exception.PrecioInvalidoException;
-import com.easymarket.marketplace.exception.PublicacionNoEliminableException;
+import com.easymarket.marketplace.exception.PublicacionConTransaccionesException;
 import com.easymarket.marketplace.exception.PublicacionNoEncontradaException;
 import com.easymarket.marketplace.exception.StockInvalidoException;
 import com.easymarket.marketplace.exception.SubcategoriaNoPerteneceACategoriaException;
@@ -14,17 +14,21 @@ import com.easymarket.marketplace.exception.TransicionEstadoInvalidaException;
 import com.easymarket.marketplace.exception.UsuarioNoEncontradoException;
 import com.easymarket.marketplace.model.Categoria;
 import com.easymarket.marketplace.model.EstadoPublicacion;
+import com.easymarket.marketplace.model.Notificacion;
 import com.easymarket.marketplace.model.Publicacion;
 import com.easymarket.marketplace.model.PublicacionEvento;
 import com.easymarket.marketplace.model.Rol;
 import com.easymarket.marketplace.model.Subcategoria;
 import com.easymarket.marketplace.model.Usuario;
 import com.easymarket.marketplace.repository.CategoriaRepository;
+import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.PublicacionRepository;
 import com.easymarket.marketplace.repository.PublicacionEventoRepository;
-import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.SubcategoriaRepository;
+import com.easymarket.marketplace.repository.TransaccionRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
+import com.easymarket.marketplace.service.NotificacionService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +43,11 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -60,7 +69,8 @@ import static org.mockito.Mockito.when;
  *   <li>Rechazo de edición en estados distintos a 'APROBADA' con {@link EstadoPublicacionNoEditableException}.</li>
  *   <li>Corrección de categoría/subcategoría desde 'CAMBIOS_SOLICITADOS' o 'RECHAZADA' con reenvío a 'PENDIENTE_REVISION' (Story 3).</li>
  *   <li>Rechazo de corrección en 'APROBADA' con {@link CategoriaPublicacionInmutableException} y en estados no corregibles con {@link TransicionEstadoInvalidaException}.</li>
- *   <li>Eliminación definitiva exclusiva de publicaciones 'RECHAZADA' con {@link com.easymarket.marketplace.exception.PublicacionNoEliminableException} para el resto.</li>
+ *   <li>Eliminación definitiva de publicación propia en CUALQUIER estado (APROBADA, PENDIENTE_REVISION, OCULTA, CAMBIOS_SOLICITADOS, RECHAZADA) — corrección de Lino 2026-08-20 extendiendo Story 3.</li>
+ *   <li>Rechazo de eliminación de una publicación con al menos una transacción asociada con {@link PublicacionConTransaccionesException} — decisión de Lino 2026-08-23 (PHA12).</li>
  *   <li>Validación de propiedad ({@link NoEsElPropietarioException}) en corrección y eliminación.</li>
  * </ul>
  * </p>
@@ -86,6 +96,12 @@ class PublicacionServiceTests {
     @Mock
     private NotificacionRepository notificacionRepository;
 
+    @Mock
+    private NotificacionService notificacionService;
+
+    @Mock
+    private TransaccionRepository transaccionRepository;
+
     @InjectMocks
     private PublicacionService publicacionService;
 
@@ -107,7 +123,7 @@ class PublicacionServiceTests {
         subcategoria.setId(100L);
 
         when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
-        when(usuarioRepository.findByRol(Rol.ADMIN)).thenReturn(Optional.of(admin));
+        lenient().when(usuarioRepository.findByRol(Rol.ADMIN)).thenReturn(Optional.of(admin));
         when(categoriaRepository.findById(10L)).thenReturn(Optional.of(categoria));
         when(subcategoriaRepository.findById(100L)).thenReturn(Optional.of(subcategoria));
 
@@ -128,6 +144,7 @@ class PublicacionServiceTests {
         assertThat(resultado.getStock()).isEqualTo(5);
 
         verify(publicacionRepository).save(any(Publicacion.class));
+        verify(notificacionService).crearNotificacionAdmin(eq("PUBLICACION_PENDIENTE_APROBAR"), anyString(), isNull(), any());
     }
 
     /**
@@ -149,25 +166,21 @@ class PublicacionServiceTests {
         publicacionGuardada.setId(500L);
 
         when(usuarioRepository.findById(1L)).thenReturn(Optional.of(vendedor));
-        when(usuarioRepository.findByRol(Rol.ADMIN)).thenReturn(Optional.of(admin));
+        lenient().when(usuarioRepository.findByRol(Rol.ADMIN)).thenReturn(Optional.of(admin));
         when(categoriaRepository.findById(10L)).thenReturn(Optional.of(categoria));
         when(subcategoriaRepository.findById(100L)).thenReturn(Optional.of(subcategoria));
         when(publicacionRepository.save(any(Publicacion.class))).thenReturn(publicacionGuardada);
+        lenient().when(notificacionService.crearNotificacionAdmin(anyString(), anyString(), any(), any())).thenReturn(mock(Notificacion.class));
 
         Publicacion resultado = publicacionService.crearPublicacion(1L, 10L, 100L, 150000L, 5, "Laptop Core i7");
 
         assertThat(resultado).isSameAs(publicacionGuardada);
-        org.mockito.ArgumentCaptor<PublicacionEvento> eventoCaptor = org.mockito.ArgumentCaptor.forClass(PublicacionEvento.class);
+        ArgumentCaptor<PublicacionEvento> eventoCaptor = ArgumentCaptor.forClass(PublicacionEvento.class);
         verify(publicacionEventoRepository).save(eventoCaptor.capture());
         assertThat(eventoCaptor.getValue().getPublicacion()).isSameAs(publicacionGuardada);
         assertThat(eventoCaptor.getValue().getActor()).isSameAs(vendedor);
         assertThat(eventoCaptor.getValue().getTipo()).isEqualTo("CREADA");
-        org.mockito.ArgumentCaptor<com.easymarket.marketplace.model.Notificacion> avisoCaptor =
-            org.mockito.ArgumentCaptor.forClass(com.easymarket.marketplace.model.Notificacion.class);
-        verify(notificacionRepository).save(avisoCaptor.capture());
-        assertThat(avisoCaptor.getValue().getUsuario()).isSameAs(admin);
-        assertThat(avisoCaptor.getValue().getTipo()).isEqualTo("NUEVA_PUBLICACION_PENDIENTE");
-        assertThat(avisoCaptor.getValue().getMensaje()).isEqualTo("Nueva publicación pendiente de revisión: #500");
+        verify(notificacionService).crearNotificacionAdmin(eq("PUBLICACION_PENDIENTE_APROBAR"), anyString(), isNull(), any());
     }
 
     /**
@@ -547,7 +560,7 @@ class PublicacionServiceTests {
         when(publicacionRepository.findById(30L)).thenReturn(Optional.of(p));
         when(publicacionRepository.save(any(Publicacion.class))).thenAnswer(i -> i.getArgument(0));
 
-        Publicacion resultado = publicacionService.editarPublicacion(30L, 25000L, 0, "Nueva descripción", 10L, 100L);
+        Publicacion resultado = publicacionService.editarPublicacion(30L, 25000L, 0, "Nueva descripción", 10L, 100L, null);
 
         assertThat(resultado.getPrecio()).isEqualTo(25000L);
         assertThat(resultado.getStock()).isEqualTo(0);
@@ -576,12 +589,12 @@ class PublicacionServiceTests {
         when(publicacionRepository.findById(31L)).thenReturn(Optional.of(p));
 
         // Intento de modificar categoría raíz (10L -> 20L)
-        assertThatThrownBy(() -> publicacionService.editarPublicacion(31L, 10000L, 5, "Desc", 20L, 100L))
+        assertThatThrownBy(() -> publicacionService.editarPublicacion(31L, 10000L, 5, "Desc", 20L, 100L, null))
             .isInstanceOf(CategoriaPublicacionInmutableException.class)
             .hasMessageContaining("No se permite modificar la categoría o subcategoría");
 
         // Intento de modificar subcategoría (100L -> 200L)
-        assertThatThrownBy(() -> publicacionService.editarPublicacion(31L, 10000L, 5, "Desc", 10L, 200L))
+        assertThatThrownBy(() -> publicacionService.editarPublicacion(31L, 10000L, 5, "Desc", 10L, 200L, null))
             .isInstanceOf(CategoriaPublicacionInmutableException.class)
             .hasMessageContaining("No se permite modificar la categoría o subcategoría");
 
@@ -600,7 +613,7 @@ class PublicacionServiceTests {
 
         when(publicacionRepository.findById(32L)).thenReturn(Optional.of(pPendiente));
 
-        assertThatThrownBy(() -> publicacionService.editarPublicacion(32L, 10000L, 5, "Desc", null, null))
+        assertThatThrownBy(() -> publicacionService.editarPublicacion(32L, 10000L, 5, "Desc", null, null, null))
             .isInstanceOf(EstadoPublicacionNoEditableException.class)
             .hasMessageContaining("Solo se pueden editar publicaciones en estado 'APROBADA'");
 
@@ -619,11 +632,11 @@ class PublicacionServiceTests {
 
         when(publicacionRepository.findById(33L)).thenReturn(Optional.of(p));
 
-        assertThatThrownBy(() -> publicacionService.editarPublicacion(33L, 0L, 5, "Desc", null, null))
+        assertThatThrownBy(() -> publicacionService.editarPublicacion(33L, 0L, 5, "Desc", null, null, null))
             .isInstanceOf(PrecioInvalidoException.class)
             .hasMessageContaining("El precio debe ser un monto entero positivo mayor a cero");
 
-        assertThatThrownBy(() -> publicacionService.editarPublicacion(33L, -500L, 5, "Desc", null, null))
+        assertThatThrownBy(() -> publicacionService.editarPublicacion(33L, -500L, 5, "Desc", null, null, null))
             .isInstanceOf(PrecioInvalidoException.class);
 
         verify(publicacionRepository, never()).save(any(Publicacion.class));
@@ -641,7 +654,7 @@ class PublicacionServiceTests {
 
         when(publicacionRepository.findById(34L)).thenReturn(Optional.of(p));
 
-        assertThatThrownBy(() -> publicacionService.editarPublicacion(34L, 10000L, -1, "Desc", null, null))
+        assertThatThrownBy(() -> publicacionService.editarPublicacion(34L, 10000L, -1, "Desc", null, null, null))
             .isInstanceOf(StockInvalidoException.class)
             .hasMessageContaining("El stock no puede ser negativo");
 
@@ -1093,47 +1106,65 @@ class PublicacionServiceTests {
     }
 
     /**
-     * Verifica que eliminar una publicación en cualquier estado distinto de RECHAZADA sea rechazado
-     * con PublicacionNoEliminableException y que delete nunca se invoque (Story 3, spec.md: solo la
-     * rechazada se elimina definitivamente).
+     * Verifica que eliminar una publicación propia sea posible en CUALQUIER estado
+     * (APROBADA, PENDIENTE_REVISION, OCULTA, CAMBIOS_SOLICITADOS, RECHAZADA)
+     * y que el repositorio reciba delete con la entidad correspondiente.
+     * Historia: corrección de Lino 2026-08-20 extendiendo Story 3 a cualquier estado.
      */
     @Test
-    @DisplayName("Debe lanzar PublicacionNoEliminableException al eliminar en estados distintos de RECHAZADA")
-    void eliminarPublicacion_EstadoNoRechazado_LanzaPublicacionNoEliminableExceptionYNoElimina() {
-        Usuario duenio = new Usuario("vendedor-noelimina@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+    @DisplayName("Debe eliminar definitivamente una publicación en CUALQUIER estado (APROBADA, PENDIENTE_REVISION, OCULTA, CAMBIOS_SOLICITADOS, RECHAZADA)")
+    void eliminarPublicacion_CualquierEstado_EliminaDefinitivamente() {
+        Usuario duenio = new Usuario("vendedor-elimina-cualquier@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
         duenio.setId(1L);
         Categoria categoria = new Categoria("Electrónica");
         categoria.setId(10L);
         Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
         subcategoria.setId(100L);
 
+        // APROBADA
         Publicacion pAprobada = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
         pAprobada.setId(61L);
         pAprobada.setEstado(EstadoPublicacion.APROBADA);
 
+        // PENDIENTE_REVISION
         Publicacion pPendiente = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
         pPendiente.setId(62L);
         pPendiente.setEstado(EstadoPublicacion.PENDIENTE_REVISION);
 
+        // OCULTA
+        Publicacion pOculta = new Publicacion(duenio, categoria, subcategoria, 150000L, 0, "Laptop");
+        pOculta.setId(65L);
+        pOculta.setEstado(EstadoPublicacion.OCULTA);
+
+        // CAMBIOS_SOLICITADOS
         Publicacion pCambios = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
         pCambios.setId(63L);
         pCambios.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
 
+        // RECHAZADA
+        Publicacion pRechazada = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        pRechazada.setId(64L);
+        pRechazada.setEstado(EstadoPublicacion.RECHAZADA);
+
         when(publicacionRepository.findById(61L)).thenReturn(Optional.of(pAprobada));
         when(publicacionRepository.findById(62L)).thenReturn(Optional.of(pPendiente));
         when(publicacionRepository.findById(63L)).thenReturn(Optional.of(pCambios));
+        when(publicacionRepository.findById(64L)).thenReturn(Optional.of(pRechazada));
+        when(publicacionRepository.findById(65L)).thenReturn(Optional.of(pOculta));
 
-        assertThatThrownBy(() -> publicacionService.eliminarPublicacion(61L, 1L))
-            .isInstanceOf(PublicacionNoEliminableException.class)
-            .hasMessageContaining("estado 'RECHAZADA'");
+        // Eliminar en cada estado - no debe lanzar excepción
+        publicacionService.eliminarPublicacion(61L, 1L);
+        publicacionService.eliminarPublicacion(62L, 1L);
+        publicacionService.eliminarPublicacion(63L, 1L);
+        publicacionService.eliminarPublicacion(64L, 1L);
+        publicacionService.eliminarPublicacion(65L, 1L);
 
-        assertThatThrownBy(() -> publicacionService.eliminarPublicacion(62L, 1L))
-            .isInstanceOf(PublicacionNoEliminableException.class);
-
-        assertThatThrownBy(() -> publicacionService.eliminarPublicacion(63L, 1L))
-            .isInstanceOf(PublicacionNoEliminableException.class);
-
-        verify(publicacionRepository, never()).delete(any(Publicacion.class));
+        // Verificar que delete se invocó para cada publicación
+        verify(publicacionRepository).delete(pAprobada);
+        verify(publicacionRepository).delete(pPendiente);
+        verify(publicacionRepository).delete(pCambios);
+        verify(publicacionRepository).delete(pRechazada);
+        verify(publicacionRepository).delete(pOculta);
     }
 
     /**
@@ -1161,5 +1192,63 @@ class PublicacionServiceTests {
             .hasMessageContaining("no es el propietario");
 
         verify(publicacionRepository, never()).delete(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que eliminar una publicación con al menos una transacción asociada lance
+     * {@link PublicacionConTransaccionesException} y NO invoque {@code delete}
+     * (decisión de Lino 2026-08-23, plan.md "PHA12 — Eliminación de publicaciones con
+     * transacciones asociadas"; corrige la violación de la FK {@code fk_transacciones_publicacion} V7).
+     */
+    @Test
+    @DisplayName("Debe lanzar PublicacionConTransaccionesException al eliminar una publicación con transacción asociada y NO invocar delete")
+    void eliminarPublicacion_ConTransaccionAsociada_LanzaPublicacionConTransaccionesExceptionYNoElimina() {
+        Usuario duenio = new Usuario("vendedor-contransaccion@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(70L);
+        publicacion.setEstado(EstadoPublicacion.APROBADA);
+
+        when(publicacionRepository.findById(70L)).thenReturn(Optional.of(publicacion));
+        when(transaccionRepository.existsByPublicacionId(70L)).thenReturn(true);
+
+        assertThatThrownBy(() -> publicacionService.eliminarPublicacion(70L, 1L))
+            .isInstanceOf(PublicacionConTransaccionesException.class)
+            .hasMessageContaining("al menos una transacción asociada");
+
+        verify(publicacionRepository, never()).delete(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que eliminar una publicación SIN transacciones asociadas siga eliminando
+     * (regresión PHA11: cualquier estado es eliminable) y que la consulta previa de existencia
+     * de transacciones se ejecute exactamente una vez antes del {@code delete}.
+     */
+    @Test
+    @DisplayName("Debe eliminar definitivamente una publicación sin transacciones asociadas (regresión PHA11)")
+    void eliminarPublicacion_SinTransacciones_EliminaDefinitivamente() {
+        Usuario duenio = new Usuario("vendedor-sintransaccion@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(71L);
+        publicacion.setEstado(EstadoPublicacion.RECHAZADA);
+
+        when(publicacionRepository.findById(71L)).thenReturn(Optional.of(publicacion));
+        when(transaccionRepository.existsByPublicacionId(71L)).thenReturn(false);
+
+        publicacionService.eliminarPublicacion(71L, 1L);
+
+        verify(transaccionRepository).existsByPublicacionId(71L);
+        verify(publicacionRepository).delete(publicacion);
     }
 }

@@ -71,6 +71,10 @@ class MarketplaceApplicationTests {
     @MockitoBean
     private PublicacionEventoRepository publicacionEventoRepository;
 
+    /** Mock required by the V17 moderation-reasons ledger dependency of PublicacionService (PHA06TSK05). */
+    @MockitoBean
+    private com.easymarket.marketplace.repository.PublicacionMotivoHistoricoRepository publicacionMotivoHistoricoRepository;
+
     @MockitoBean
     private com.easymarket.marketplace.repository.TransaccionRepository transaccionRepository;
 

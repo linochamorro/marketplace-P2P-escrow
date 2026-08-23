@@ -42,4 +42,20 @@ public interface NotificacionRepository extends JpaRepository<Notificacion, Long
      *         equal instants, by {@code id} descending
      */
     List<Notificacion> findByUsuarioIdOrderByCreatedAtDescIdDesc(Long usuarioId);
+
+    /**
+     * Finds the notifications of one recipient whose type is one of the supplied actionable
+     * types, newest first (PHA09TSK05).
+     *
+     * <p>The redesigned notification center groups entries by role: the caller passes exactly
+     * the {@code tipo} values that are actionable for the authenticated role and renders the
+     * result. Ordering matches {@link #findByUsuarioIdOrderByCreatedAtDescIdDesc(Long)}:
+     * {@code createdAt} descending with the persistent identifier as tie-breaker. Read-only
+     * projection; it performs no state transition and no ledger write.</p>
+     *
+     * @param usuarioId recipient to match
+     * @param tipos stable notification types considered actionable for the caller's role
+     * @return matching notifications of that recipient, newest first
+     */
+    List<Notificacion> findByUsuarioIdAndTipoInOrderByCreatedAtDescIdDesc(Long usuarioId, List<String> tipos);
 }

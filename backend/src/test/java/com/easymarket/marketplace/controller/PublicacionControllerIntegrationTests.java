@@ -166,7 +166,7 @@ public class PublicacionControllerIntegrationTests {
      * {@code notificaciones} y PostgreSQL exige truncar juntas las tablas relacionadas.</p>
      */
     private void limpiarFixturesAppendOnly() {
-        jdbcTemplate.execute("TRUNCATE TABLE publicacion_eventos, avisos_envio_pendiente, notificaciones RESTART IDENTITY");
+        jdbcTemplate.execute("TRUNCATE TABLE publicacion_eventos, publicacion_motivos_historicos, avisos_envio_pendiente, notificaciones RESTART IDENTITY");
     }
 
     /**

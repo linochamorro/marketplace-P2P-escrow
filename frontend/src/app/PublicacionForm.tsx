@@ -1,260 +1,175 @@
-'use client';
+﻿'use client';
 
-import React, { useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import {
+  cargarCategorias,
+  solesACentavos,
+  type CategoriaListado
+} from './publicaciones/publicaciones-utils';
 
-/**
- * Interface para las props del componente PublicacionForm.
- */
+/** Props del formulario de creación integrado con el catálogo real. */
 export interface PublicacionFormProps {
-  /** Callback opcional ejecutado al crear exitosamente la publicación */
+  /** Callback ejecutado únicamente después de una creación HTTP exitosa. */
   onSuccess?: () => void;
+  /** Transporte inyectable de categorías; por defecto consulta `GET /categorias`. */
+  obtenerCategorias?: (url: string) => Promise<CategoriaListado[]>;
 }
 
-/**
- * Interface de errores de validación del cliente.
- */
+/** Errores visibles de validación o transporte del formulario. */
 interface FormErrors {
+  /** Error del precio escrito en soles. */
   precio?: string;
+  /** Error del stock entero. */
   stock?: string;
+  /** Error del catálogo o del request de creación. */
   general?: string;
 }
 
 /**
- * Datos estáticos temporales para categorías y subcategorías.
- * TODO: reemplazar con GET /categorias real cuando exista esa tarea de API — ver PHA02TSK12, riesgo declarado.
- */
-const CATEGORIAS_MOCK = [
-  {
-    id: 1,
-    nombre: 'Electrónica',
-    subcategorias: [
-      { id: 101, nombre: 'Smartphones' },
-      { id: 102, nombre: 'Laptops' }
-    ]
-  },
-  {
-    id: 2,
-    nombre: 'Hogar',
-    subcategorias: [
-      { id: 201, nombre: 'Muebles' },
-      { id: 202, nombre: 'Decoración' }
-    ]
-  }
-];
-
-/**
- * Componente PublicacionForm (PHA02TSK12).
- * Formulario de creación de publicación para el vendedor según Story 1 de spec.md y sistema de diseño DESIGN.md.
+ * Crea una publicación con IDs del catálogo backend y dinero convertido por segmentos
+ * de texto, sin aritmética decimal.
  *
- * @param props Props del componente {@link PublicacionFormProps}
- * @returns Elemento JSX con el formulario de publicación
+ * @param props callback de éxito y transporte opcional para pruebas
+ * @returns formulario con carga, error y selectores dependientes accesibles
  */
-export default function PublicacionForm({ onSuccess }: PublicacionFormProps) {
-  const [precioInput, setPrecioInput] = useState<string>('');
-  const [stockInput, setStockInput] = useState<string>('1');
-  const [categoriaId, setCategoriaId] = useState<number>(CATEGORIAS_MOCK[0].id);
-  const [subcategoriaId, setSubcategoriaId] = useState<number>(CATEGORIAS_MOCK[0].subcategorias[0].id);
-  const [descripcion, setDescripcion] = useState<string>('');
-
+export default function PublicacionForm({
+  onSuccess,
+  obtenerCategorias = cargarCategorias
+}: PublicacionFormProps) {
+  const [categorias, setCategorias] = useState<CategoriaListado[]>([]);
+  const [precioInput, setPrecioInput] = useState('');
+  const [stockInput, setStockInput] = useState('1');
+  const [categoriaId, setCategoriaId] = useState('');
+  const [subcategoriaId, setSubcategoriaId] = useState('');
+  const [descripcion, setDescripcion] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [cargandoCategorias, setCargandoCategorias] = useState(true);
+  const [catalogoRespondio, setCatalogoRespondio] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+
+    /**
+     * Carga el catálogo y selecciona la primera pareja real disponible.
+     *
+     * @returns promesa resuelta después de reflejar carga o error
+     */
+    const cargarCatalogo = async (): Promise<void> => {
+      try {
+        const arbol = await obtenerCategorias(`${baseUrl}/categorias`);
+        setCatalogoRespondio(true);
+        setCategorias(arbol);
+        const primeraCategoriaConPareja = arbol.find((categoria) => categoria.subcategorias.length > 0);
+        setCategoriaId(primeraCategoriaConPareja ? String(primeraCategoriaConPareja.id) : '');
+        setSubcategoriaId(primeraCategoriaConPareja?.subcategorias[0]
+          ? String(primeraCategoriaConPareja.subcategorias[0].id)
+          : '');
+      } catch (error) {
+        setErrors({ general: error instanceof Error ? error.message : 'Error de red al cargar categorías' });
+      } finally {
+        setCargandoCategorias(false);
+      }
+    };
+
+    void cargarCatalogo();
+  }, [obtenerCategorias]);
+
+  const categoriaSeleccionada = useMemo(
+    () => categorias.find((categoria) => String(categoria.id) === categoriaId),
+    [categorias, categoriaId]
+  );
 
   /**
-   * Maneja el cambio de categoría seleccionada y actualiza automáticamente la subcategoría seleccionada a la primera disponible.
+   * Cambia la categoría y selecciona solo la primera subcategoría perteneciente a ella.
+   *
+   * @param event evento del selector de categoría
+   * @returns nada; actualiza la pareja de IDs local
    */
-  const handleCategoriaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const catId = Number(e.target.value);
-    setCategoriaId(catId);
-    const catEncontrada = CATEGORIAS_MOCK.find((c) => c.id === catId);
-    if (catEncontrada && catEncontrada.subcategorias.length > 0) {
-      setSubcategoriaId(catEncontrada.subcategorias[0].id);
-    }
+  const handleCategoriaChange = (event: ChangeEvent<HTMLSelectElement>): void => {
+    const nuevoId = event.target.value;
+    const categoria = categorias.find((item) => String(item.id) === nuevoId);
+    setCategoriaId(nuevoId);
+    setSubcategoriaId(categoria?.subcategorias[0] ? String(categoria.subcategorias[0].id) : '');
   };
 
   /**
-   * Valida el formulario del lado del cliente y realiza la petición HTTP POST al backend.
+   * Valida enteros/centavos y crea la publicación usando exclusivamente IDs resueltos.
+   *
+   * @param event envío del formulario
+   * @returns promesa resuelta al terminar el request o la validación local
    */
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setErrors({});
-
-    const newErrors: FormErrors = {};
-    const precioNumerico = parseFloat(precioInput);
-    const stockNumerico = parseInt(stockInput, 10);
-
-    // Validación de precio: > 0 (Story 1)
-    if (isNaN(precioNumerico) || precioNumerico <= 0) {
-      newErrors.precio = 'El precio debe ser mayor a 0';
-    }
-
-    // Validación de stock: >= 1 (Story 1)
-    if (isNaN(stockNumerico) || stockNumerico < 1) {
-      newErrors.stock = 'El stock debe ser al menos 1';
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    const nuevosErrores: FormErrors = {};
+    const centavosTexto = solesACentavos(precioInput);
+    const stockValido = /^\d+$/.test(stockInput) && Number(stockInput) >= 1;
+    if (centavosTexto === null || Number(centavosTexto) <= 0) nuevosErrores.precio = 'Ingresa un precio válido en soles mayor a 0 y con hasta dos decimales';
+    if (!stockValido) nuevosErrores.stock = 'El stock debe ser al menos 1';
+    if (!categoriaId || !subcategoriaId) nuevosErrores.general = 'Selecciona una categoría con subcategorías disponibles';
+    if (Object.keys(nuevosErrores).length > 0) {
+      setErrors(nuevosErrores);
       return;
     }
 
+    setErrors({});
     setIsSubmitting(true);
-
-    // Decisión de UX: Convertir precio flotante ingresado (ej. 15.00) a centavos (1500) según constitution principio 3 ANTES de construir el payload del fetch
-    const precioEnCentavos = Math.round(precioNumerico * 100);
-
-    const payload = {
-      precio: precioEnCentavos,
-      stock: stockNumerico,
-      categoriaId,
-      subcategoriaId,
-      descripcion
-    };
-
-    // Obtener la URL base del backend desde la variable de entorno NEXT_PUBLIC_API_URL
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-    const endpoint = `${baseUrl}/publicaciones`;
-
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${baseUrl}/publicaciones`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          precio: Number(centavosTexto),
+          stock: Number(stockInput),
+          categoriaId: Number(categoriaId),
+          subcategoriaId: Number(subcategoriaId),
+          descripcion
+        })
       });
-
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        // Extrae el campo 'mensaje' devuelto por GlobalExceptionHandler del backend
-        const mensajeBackend = errorData?.mensaje || `Error del servidor (código ${response.status})`;
-        setErrors({ general: mensajeBackend });
-      } else {
-        if (onSuccess) {
-          onSuccess();
-        }
+        const data: unknown = await response.json().catch(() => null);
+        const mensaje = data && typeof data === 'object' && 'mensaje' in data && typeof data.mensaje === 'string'
+          ? data.mensaje : `Error al crear publicación (código ${response.status})`;
+        setErrors({ general: mensaje });
+        return;
       }
-    } catch (err) {
+      onSuccess?.();
+    } catch {
       setErrors({ general: 'Error de red al conectar con el servidor' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const categoriaSeleccionada = CATEGORIAS_MOCK.find((c) => c.id === categoriaId);
-
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="max-w-xl mx-auto p-6 bg-white border border-slate-200 rounded-lg shadow-none space-y-6"
-    >
-      <h2 className="text-2xl font-bold text-[#0F172A] tracking-tight">Publicar Producto o Servicio</h2>
-
-      {errors.general && (
-        <div className="p-3 bg-[#ffdad6] border border-[#ba1a1a] text-[#93000a] rounded text-sm font-medium">
-          {errors.general}
-        </div>
-      )}
-
-      {/* Precio Field */}
-      <div>
-        <label htmlFor="precio" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-          Precio (USD)
-        </label>
-        <input
-          id="precio"
-          type="number"
-          step="0.01"
-          placeholder="0.00"
-          value={precioInput}
-          onChange={(e) => setPrecioInput(e.target.value)}
-          className={`w-full px-3 py-2 bg-white border rounded text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-slate-200 focus:border-[#0F172A] font-mono ${
-            errors.precio ? 'border-red-500' : 'border-slate-300'
-          }`}
-        />
-        {errors.precio && <p className="mt-1 text-xs text-red-600">{errors.precio}</p>}
-      </div>
-
-      {/* Stock Field */}
-      <div>
-        <label htmlFor="stock" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-          Stock
-        </label>
-        <input
-          id="stock"
-          type="number"
-          step="1"
-          placeholder="1"
-          value={stockInput}
-          onChange={(e) => setStockInput(e.target.value)}
-          className={`w-full px-3 py-2 bg-white border rounded text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-slate-200 focus:border-[#0F172A] font-mono ${
-            errors.stock ? 'border-red-500' : 'border-slate-300'
-          }`}
-        />
-        {errors.stock && <p className="mt-1 text-xs text-red-600">{errors.stock}</p>}
-      </div>
-
-      {/* Categoria Selector */}
-      <div>
-        <label htmlFor="categoria" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-          Categoría
-        </label>
-        <select
-          id="categoria"
-          value={categoriaId}
-          onChange={handleCategoriaChange}
-          className="w-full px-3 py-2 bg-white border border-slate-300 rounded text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-slate-200 focus:border-[#0F172A]"
-        >
-          {CATEGORIAS_MOCK.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.nombre}
-            </option>
-          ))}
+    <form onSubmit={handleSubmit} className="mx-auto max-w-xl space-y-6 rounded-lg border border-slate-200 bg-white p-6">
+      <h1 className="text-2xl font-bold tracking-tight text-[#0F172A]">Publicar Producto o Servicio</h1>
+      {cargandoCategorias && <p role="status" aria-busy="true" className="text-sm text-slate-600">Cargando categorías...</p>}
+      {errors.general && <p role="alert" className="rounded border border-[#ba1a1a] bg-[#ffdad6] p-3 text-sm font-medium text-[#93000a]">{errors.general}</p>}
+      <label className="block text-sm text-slate-700">Precio (S/)
+        <input aria-label="Precio (S/)" inputMode="decimal" value={precioInput} onChange={(event) => setPrecioInput(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-mono text-[#0F172A]" />
+        {errors.precio && <span className="mt-1 block text-xs text-red-600">{errors.precio}</span>}
+      </label>
+      <label className="block text-sm text-slate-700">Stock
+        <input aria-label="Stock" inputMode="numeric" value={stockInput} onChange={(event) => setStockInput(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-mono text-[#0F172A]" />
+        {errors.stock && <span className="mt-1 block text-xs text-red-600">{errors.stock}</span>}
+      </label>
+      <label className="block text-sm text-slate-700">Categoría
+        <select aria-label="Categoría" value={categoriaId} onChange={handleCategoriaChange} disabled={cargandoCategorias || categorias.length === 0} className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-[#0F172A]">
+          {categorias.map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nombre}</option>)}
         </select>
-      </div>
-
-      {/* Subcategoria Selector */}
-      <div>
-        <label htmlFor="subcategoria" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-          Subcategoría
-        </label>
-        <select
-          id="subcategoria"
-          value={subcategoriaId}
-          onChange={(e) => setSubcategoriaId(Number(e.target.value))}
-          className="w-full px-3 py-2 bg-white border border-slate-300 rounded text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-slate-200 focus:border-[#0F172A]"
-        >
-          {categoriaSeleccionada?.subcategorias.map((sub) => (
-            <option key={sub.id} value={sub.id}>
-              {sub.nombre}
-            </option>
-          ))}
+      </label>
+      <label className="block text-sm text-slate-700">Subcategoría
+        <select aria-label="Subcategoría" value={subcategoriaId} onChange={(event) => setSubcategoriaId(event.target.value)} disabled={!categoriaSeleccionada?.subcategorias.length} className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-[#0F172A]">
+          {categoriaSeleccionada?.subcategorias.map((subcategoria) => <option key={subcategoria.id} value={subcategoria.id}>{subcategoria.nombre}</option>)}
         </select>
-      </div>
-
-      {/* Descripcion Field */}
-      <div>
-        <label htmlFor="descripcion" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-          Descripción
-        </label>
-        <textarea
-          id="descripcion"
-          rows={4}
-          placeholder="Describe los detalles de tu producto..."
-          value={descripcion}
-          onChange={(e) => setDescripcion(e.target.value)}
-          className="w-full px-3 py-2 bg-white border border-slate-300 rounded text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-slate-200 focus:border-[#0F172A]"
-        />
-      </div>
-
-      {/* Submit Button */}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-full py-2.5 px-4 bg-[#0F172A] hover:bg-slate-800 text-white font-medium rounded text-sm transition-colors border border-slate-900 disabled:opacity-50"
-      >
-        {isSubmitting ? 'Publicando...' : 'Publicar'}
-      </button>
+      </label>
+      <label className="block text-sm text-slate-700">Descripción
+        <textarea aria-label="Descripción" rows={4} value={descripcion} onChange={(event) => setDescripcion(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-[#0F172A]" />
+      </label>
+      <button type="submit" disabled={cargandoCategorias || !catalogoRespondio || isSubmitting} className="w-full rounded border border-slate-900 bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{isSubmitting ? 'Publicando...' : 'Publicar'}</button>
     </form>
   );
 }
