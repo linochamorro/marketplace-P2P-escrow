@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
@@ -77,6 +78,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * que los endpoints bajo {@code /admin} de lectura aún no existan y por eso los escenarios 200
  * fallan con HTTP 404 (endpoint no mapeado); los escenarios 403 pasan desde la cadena de
  * seguridad porque {@code SecurityConfig} ya exige rol {@code ADMIN} en {@code /admin/**}.</p>
+ *
+ * <p><strong>Política única de fixtures ADMIN (PHA12TSK06).</strong> Esta clase NO crea ninguna
+ * fila ADMIN: la limpieza de {@code @BeforeEach} conserva al único administrador provisionado
+ * por el contexto de test (seed V6 con {@code ADMIN_EMAIL}/{@code ADMIN_PASSWORD_HASH}, cuyo
+ * hash corresponde a la contraseña plana compartida {@code PASSWORD_RAW}) y todo escenario que
+ * necesita iniciar sesión tras un gate {@code hasRole("ADMIN")} lo hace exclusivamente con esa
+ * identidad única, resuelta mediante {@link #obtenerAdminUnico()}. Los usuarios auxiliares nacen
+ * todos {@code Rol.USUARIO}. Motivo: {@code UsuarioRepository.findByRol(Rol.ADMIN)} es Optional
+ * por diseño (invariante de admin único, PHA06TSK02) y cualquier fixture con un ADMIN adicional
+ * rompe esa invariante.</p>
  */
 @SpringBootTest
 @Testcontainers
@@ -87,7 +98,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "spring.jpa.hibernate.ddl-auto=validate",
     "app.jwt.secret=clave-secreta-pruebas-admin-consulta-minimo-32-caracteres",
     "ADMIN_EMAIL=admin.seed@easymarket.com",
-    "ADMIN_PASSWORD_HASH=$2a$10$R9h/cIPz0gi.URNNXRkh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW"
+    "ADMIN_PASSWORD_HASH=$2a$10$ezbtTwVogv0lR8nXJuHRk.RGzMVbhLBUjDAt4zzBdJhbqR.U53k6u"
 })
 class AdminConsultaControllerIntegrationTests {
 
@@ -108,6 +119,10 @@ class AdminConsultaControllerIntegrationTests {
     @Autowired private LoginAttemptRepository loginAttemptRepository;
     @Autowired private PasswordEncoder passwordEncoder;
 
+    /** Email del ADMIN único provisionado por el contexto de test (propiedad {@code ADMIN_EMAIL}, seed V6). */
+    @Value("${ADMIN_EMAIL}")
+    private String adminEmail;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private MockMvc mockMvc;
     private Usuario vendedor;
@@ -120,8 +135,9 @@ class AdminConsultaControllerIntegrationTests {
     /**
      * Configura identidades y catálogo aislados para cada escenario HTTP.
      *
-     * <p>Elimina primero las tablas con dependencias de FK y luego las entidades raíz, de modo
-     * que cada método arranca sin residuos de escenarios previos. {@code movimientos_saldo} es
+     * <p>Elimina primero las tablas con dependencias de FK y luego las entidades raíz — salvo el
+     * ADMIN único del seed V6, que sobrevive a la limpieza (política PHA12TSK06) —, de modo que
+     * cada método arranca sin residuos de escenarios previos. {@code movimientos_saldo} es
      * append-only (trigger de V11) y por eso nunca se borra aquí: el único escenario que lo
      * puebla es el último ({@link #tablero_Admin_SumaExactaYCasoVacioConDatosControlados}), que
      * verifica el caso vacío antes de sembrar sus propios movimientos.</p>
@@ -134,15 +150,40 @@ class AdminConsultaControllerIntegrationTests {
         publicacionRepository.deleteAll();
         subcategoriaRepository.deleteAll();
         categoriaRepository.deleteAll();
-        usuarioRepository.deleteAll();
+        eliminarUsuariosSalvoAdminUnico();
 
         String sufijo = Long.toUnsignedString(System.nanoTime());
         vendedor = guardarUsuario("vendedor.admin.consulta." + sufijo + "@easymarket.com", Rol.USUARIO);
         comprador = guardarUsuario("comprador.admin.consulta." + sufijo + "@easymarket.com", Rol.USUARIO);
-        admin = guardarUsuario("admin.consulta." + sufijo + "@easymarket.com", Rol.ADMIN);
+        admin = obtenerAdminUnico();
         usuarioRegular = guardarUsuario("regular.consulta." + sufijo + "@easymarket.com", Rol.USUARIO);
         categoria = categoriaRepository.save(new Categoria("Categoría admin consulta " + sufijo));
         subcategoria = subcategoriaRepository.save(new Subcategoria(categoria, "Subcategoría admin consulta " + sufijo));
+    }
+
+    /**
+     * Elimina los usuarios de fixtures conservando únicamente las filas con rol {@code ADMIN}
+     * (política PHA12TSK06): el ADMIN único provisionado por el seed V6 sobrevive a cada limpieza
+     * para que los gates {@code hasRole("ADMIN")} se autentiquen con él sin que ningún fixture
+     * cree filas ADMIN nuevas.
+     */
+    private void eliminarUsuariosSalvoAdminUnico() {
+        usuarioRepository.findAll().stream()
+                .filter(usuario -> usuario.getRol() != Rol.ADMIN)
+                .forEach(usuarioRepository::delete);
+    }
+
+    /**
+     * Resuelve la identidad persistida del ADMIN único provisionado por el contexto de test
+     * (seed V6, email leído de la propiedad {@code ADMIN_EMAIL}).
+     *
+     * @return la entidad persistida del único administrador
+     * @throws IllegalStateException si el admin sembrado no está presente (provisión de datos inconsistente)
+     */
+    private Usuario obtenerAdminUnico() {
+        return usuarioRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new IllegalStateException(
+                        "El ADMIN único provisionado por el contexto (" + adminEmail + ") no está presente"));
     }
 
     /**
@@ -333,7 +374,8 @@ class AdminConsultaControllerIntegrationTests {
     }
 
     /**
-     * Persiste un usuario de prueba con el rol solicitado.
+     * Persiste un usuario auxiliar de prueba con el rol solicitado (política PHA12TSK06: en esta
+     * clase solo se invoca con {@link Rol#USUARIO}; el ADMIN único nunca nace aquí).
      *
      * @param email correo único del usuario
      * @param rol rol persistido para la identidad

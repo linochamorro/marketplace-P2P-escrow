@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
@@ -60,6 +61,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>Desde PHA12 (decisión de Lino 2026-08-23) verifica además que el {@code DELETE} sobre una
  * publicación con al menos una transacción asociada responde 409 Conflict vía
  * {@code PublicacionConTransaccionesException}, sin eliminar la fila ni su transacción.</p>
+ *
+ * <p><strong>Política única de fixtures ADMIN (PHA12TSK06).</strong> Esta clase NO crea ninguna
+ * fila ADMIN: la limpieza de {@code @BeforeEach} conserva al único administrador provisionado
+ * por el contexto de test (seed V6 con {@code ADMIN_EMAIL}/{@code ADMIN_PASSWORD_HASH}, cuyo
+ * hash corresponde a la contraseña plana compartida {@code passwordRaw}) y los escenarios de
+ * moderación que necesitan iniciar sesión tras el gate {@code hasRole("ADMIN")} — y verificar el
+ * {@code actor_id} del motivo histórico — usan exclusivamente esa identidad única, resuelta
+ * mediante {@link #obtenerAdminUnico()}. Motivo: {@code UsuarioRepository.findByRol(Rol.ADMIN)}
+ * es Optional por diseño (invariante de admin único, PHA06TSK02) y cualquier fixture con un
+ * ADMIN adicional rompe esa invariante.</p>
  */
 @SpringBootTest
 @Testcontainers
@@ -69,7 +80,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "spring.jpa.hibernate.ddl-auto=validate",
     "app.jwt.secret=clave-secreta-para-pruebas-de-integracion-publicaciones-min-32-chars",
     "ADMIN_EMAIL=admin.seed@easymarket.com",
-    "ADMIN_PASSWORD_HASH=$2a$10$R9h/cIPz0gi.URNNXRkh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW"
+    "ADMIN_PASSWORD_HASH=$2a$10$ezbtTwVogv0lR8nXJuHRk.RGzMVbhLBUjDAt4zzBdJhbqR.U53k6u"
 })
 public class CorregirEliminarPublicacionControllerIntegrationTests {
 
@@ -109,6 +120,10 @@ public class CorregirEliminarPublicacionControllerIntegrationTests {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    /** Email del ADMIN único provisionado por el contexto de test (propiedad {@code ADMIN_EMAIL}, seed V6). */
+    @Value("${ADMIN_EMAIL}")
+    private String adminEmail;
+
     private Usuario usuarioDuenio;
     private Usuario usuarioAdmin;
     private Categoria categoriaVehiculos;
@@ -124,7 +139,8 @@ public class CorregirEliminarPublicacionControllerIntegrationTests {
      * <p>Vacía primero las tablas append-only ({@code publicacion_eventos},
      * {@code publicacion_motivos_historicos}, {@code avisos_envio_pendiente} y
      * {@code notificaciones}) mediante {@code TRUNCATE} — DDL exclusivo de Testcontainers que no
-     * dispara los triggers de inmutabilidad — y luego elimina las filas padre en orden referencial.</p>
+     * dispara los triggers de inmutabilidad — y luego elimina las filas padre en orden referencial,
+     * conservando al ADMIN único del seed V6 (política PHA12TSK06).</p>
      */
     @BeforeEach
     void setUp() {
@@ -138,7 +154,7 @@ public class CorregirEliminarPublicacionControllerIntegrationTests {
         publicacionRepository.deleteAll();
         subcategoriaRepository.deleteAll();
         categoriaRepository.deleteAll();
-        usuarioRepository.deleteAll();
+        eliminarUsuariosSalvoAdminUnico();
 
         usuarioDuenio = new Usuario(
                 "duenio.prueba@easymarket.com",
@@ -149,20 +165,39 @@ public class CorregirEliminarPublicacionControllerIntegrationTests {
         );
         usuarioDuenio = usuarioRepository.save(usuarioDuenio);
 
-        usuarioAdmin = new Usuario(
-                "admin.test.corregir@easymarket.com",
-                passwordEncoder.encode(passwordRaw),
-                Rol.ADMIN,
-                0L,
-                ZonedDateTime.now(ZoneId.of("America/Lima"))
-        );
-        usuarioAdmin = usuarioRepository.save(usuarioAdmin);
+        // ADMIN único provisionado por el contexto (seed V6); ningún fixture crea ADMIN (PHA12TSK06)
+        usuarioAdmin = obtenerAdminUnico();
 
         categoriaVehiculos = categoriaRepository.save(new Categoria("Vehículos"));
         subcategoriaAutos = subcategoriaRepository.save(new Subcategoria(categoriaVehiculos, "Autos"));
 
         categoriaElectronica = categoriaRepository.save(new Categoria("Electrónica"));
         subcategoriaSmartphones = subcategoriaRepository.save(new Subcategoria(categoriaElectronica, "Smartphones"));
+    }
+
+    /**
+     * Elimina los usuarios de fixtures conservando únicamente las filas con rol {@code ADMIN}
+     * (política PHA12TSK06): el ADMIN único provisionado por el seed V6 sobrevive a cada limpieza
+     * para que los gates {@code hasRole("ADMIN")} se autentiquen con él sin que ningún fixture
+     * cree filas ADMIN nuevas.
+     */
+    private void eliminarUsuariosSalvoAdminUnico() {
+        usuarioRepository.findAll().stream()
+                .filter(usuario -> usuario.getRol() != Rol.ADMIN)
+                .forEach(usuarioRepository::delete);
+    }
+
+    /**
+     * Resuelve la identidad persistida del ADMIN único provisionado por el contexto de test
+     * (seed V6, email leído de la propiedad {@code ADMIN_EMAIL}).
+     *
+     * @return la entidad persistida del único administrador
+     * @throws IllegalStateException si el admin sembrado no está presente (provisión de datos inconsistente)
+     */
+    private Usuario obtenerAdminUnico() {
+        return usuarioRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new IllegalStateException(
+                        "El ADMIN único provisionado por el contexto (" + adminEmail + ") no está presente"));
     }
 
     /**

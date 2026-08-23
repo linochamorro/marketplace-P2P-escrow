@@ -22,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
@@ -75,6 +76,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * corresponde a PHA12TSK04) y, para las aserciones de contenido del listado, pertenecen a la lista
  * del rol correspondiente para sobrevivir al filtro. La ruta queda protegida por
  * {@code anyRequest().authenticated()} de {@code SecurityConfig} (sin requestMatcher nuevo).</p>
+ *
+ * <p><strong>Política única de fixtures ADMIN (PHA12TSK06).</strong> Esta clase NO crea ninguna
+ * fila ADMIN: el escenario de filtro por rol ADMIN inicia sesión exclusivamente con el
+ * administrador único provisionado por el contexto de test (seed V6 con
+ * {@code ADMIN_EMAIL}/{@code ADMIN_PASSWORD_HASH}, cuyo hash corresponde a la contraseña plana
+ * compartida {@code PASSWORD_RAW}), resuelto mediante {@link #obtenerAdminUnico()} tras una
+ * limpieza que lo conserva. Motivo: {@code UsuarioRepository.findByRol(Rol.ADMIN)} es Optional
+ * por diseño (invariante de admin único, PHA06TSK02) y cualquier fixture con un ADMIN adicional
+ * rompe esa invariante.</p>
  */
 @SpringBootTest
 @Testcontainers
@@ -84,7 +94,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "spring.jpa.hibernate.ddl-auto=validate",
     "app.jwt.secret=clave-secreta-pruebas-notificaciones-minimo-32-caracteres",
     "ADMIN_EMAIL=admin.seed@easymarket.com",
-    "ADMIN_PASSWORD_HASH=$2a$10$R9h/cIPz0gi.URNNXRkh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW"
+    "ADMIN_PASSWORD_HASH=$2a$10$ezbtTwVogv0lR8nXJuHRk.RGzMVbhLBUjDAt4zzBdJhbqR.U53k6u"
 })
 class NotificacionControllerIntegrationTests {
 
@@ -104,6 +114,10 @@ class NotificacionControllerIntegrationTests {
     @Autowired private TransaccionRepository transaccionRepository;
     @Autowired private NotificacionRepository notificacionRepository;
     @Autowired private PasswordEncoder passwordEncoder;
+
+    /** Email del ADMIN único provisionado por el contexto de test (propiedad {@code ADMIN_EMAIL}, seed V6). */
+    @Value("${ADMIN_EMAIL}")
+    private String adminEmail;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private MockMvc mockMvc;
@@ -325,11 +339,13 @@ class NotificacionControllerIntegrationTests {
      * ({@code PUBLICACION_PENDIENTE_APROBAR}, {@code DISPUTA_PENDIENTE_RESOLVER}) y excluye los
      * tipos de compra/venta/envío/disputa y los avisos diarios.
      *
-     * <p>Como la contraseña en claro del admin sembrado por V6 no es conocida por la suite, este
-     * escenario reconstruye el estado siguiendo el patrón de
-     * {@code AdminConsultaControllerIntegrationTests}: limpia las tablas con dependencias de FK y
-     * crea EXACTAMENTE UN usuario con rol {@code ADMIN} (la invariante de admin único se conserva
-     * durante todo el test porque el borrado previo elimina también el admin sembrado).</p>
+     * <p>Política única de fixtures ADMIN (PHA12TSK06): este escenario NO crea ninguna fila ADMIN.
+     * {@link #prepararEscenarioAdminUnico()} limpia las tablas con dependencias de FK conservando
+     * al administrador único provisionado por el contexto de test (seed V6 con
+     * {@code ADMIN_EMAIL}/{@code ADMIN_PASSWORD_HASH}, cuyo hash corresponde a la contraseña plana
+     * compartida {@code PASSWORD_RAW}) y la identidad se resuelve con
+     * {@link #obtenerAdminUnico()}; así la invariante de admin único ({@code findByRol(Rol.ADMIN)},
+     * Optional por diseño, PHA06TSK02) se conserva durante todo el test.</p>
      *
      * @throws Exception si falla la interacción HTTP o la preparación del escenario
      */
@@ -337,9 +353,7 @@ class NotificacionControllerIntegrationTests {
     @DisplayName("GET /notificaciones como ADMIN devuelve solo moderación/disputas de su rol")
     void obtener_AdminVeSoloModeracionYDisputas_Retorna200FiltradasPorRol() throws Exception {
         prepararEscenarioAdminUnico();
-
-        String sufijo = Long.toUnsignedString(System.nanoTime());
-        Usuario admin = guardarUsuario("admin.notificaciones.filtro." + sufijo + "@easymarket.com", Rol.ADMIN);
+        Usuario admin = obtenerAdminUnico();
 
         ZonedDateTime tAntigua = ahora().minusMinutes(2L);
         ZonedDateTime tReciente = ahora().minusMinutes(1L);
@@ -473,9 +487,9 @@ class NotificacionControllerIntegrationTests {
     /**
      * Deja la base de datos en el estado que exige el escenario de admin único: borra las tablas
      * respetando el orden inverso de sus dependencias de FK (notificaciones &rarr; transacciones
-     * &rarr; publicaciones &rarr; catálogo &rarr; usuarios), incluido el admin sembrado por V6,
-     * de modo que el único {@code ADMIN} existente durante el test sea el que crea el propio
-     * escenario (patrón de {@code AdminConsultaControllerIntegrationTests}). Los logs append-only
+     * &rarr; publicaciones &rarr; catálogo &rarr; usuarios auxiliares). El ADMIN único sembrado
+     * por V6 NO se borra (política PHA12TSK06): sobrevive a la limpieza y el escenario inicia
+     * sesión con él, sin que ningún fixture cree filas ADMIN nuevas. Los logs append-only
      * de negocio no se pueblan en esta clase, por lo que el borrado no afecta evidencia alguna.
      */
     private void prepararEscenarioAdminUnico() {
@@ -484,29 +498,44 @@ class NotificacionControllerIntegrationTests {
         publicacionRepository.deleteAll();
         subcategoriaRepository.deleteAll();
         categoriaRepository.deleteAll();
-        usuarioRepository.deleteAll();
+        eliminarUsuariosSalvoAdminUnico();
     }
 
     /**
-     * Persiste un usuario regular de prueba con la contraseña compartida de la clase.
+     * Elimina los usuarios de fixtures conservando únicamente las filas con rol {@code ADMIN}
+     * (política PHA12TSK06): el ADMIN único provisionado por el seed V6 sobrevive a la limpieza
+     * para que los gates {@code hasRole("ADMIN")} se autentiquen con él sin que ningún fixture
+     * cree filas ADMIN nuevas.
+     */
+    private void eliminarUsuariosSalvoAdminUnico() {
+        usuarioRepository.findAll().stream()
+                .filter(usuario -> usuario.getRol() != Rol.ADMIN)
+                .forEach(usuarioRepository::delete);
+    }
+
+    /**
+     * Resuelve la identidad persistida del ADMIN único provisionado por el contexto de test
+     * (seed V6, email leído de la propiedad {@code ADMIN_EMAIL}).
+     *
+     * @return la entidad persistida del único administrador
+     * @throws IllegalStateException si el admin sembrado no está presente (provisión de datos inconsistente)
+     */
+    private Usuario obtenerAdminUnico() {
+        return usuarioRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new IllegalStateException(
+                        "El ADMIN único provisionado por el contexto (" + adminEmail + ") no está presente"));
+    }
+
+    /**
+     * Persiste un usuario regular de prueba con la contraseña compartida de la clase
+     * (política PHA12TSK06: todos los usuarios nacidos aquí son {@link Rol#USUARIO}).
      *
      * @param email correo único del usuario
      * @return usuario persistido
      */
     private Usuario guardarUsuario(String email) {
-        return guardarUsuario(email, Rol.USUARIO);
-    }
-
-    /**
-     * Persiste un usuario de prueba del rol indicado con la contraseña compartida de la clase.
-     *
-     * @param email correo único del usuario
-     * @param rol rol del usuario ({@link Rol#USUARIO} o {@link Rol#ADMIN})
-     * @return usuario persistido
-     */
-    private Usuario guardarUsuario(String email, Rol rol) {
-        return usuarioRepository.save(new Usuario(email, passwordEncoder.encode(PASSWORD_RAW), rol,
-                0L, ZonedDateTime.now(ZONA_LIMA)));
+        return usuarioRepository.save(new Usuario(email, passwordEncoder.encode(PASSWORD_RAW),
+                Rol.USUARIO, 0L, ZonedDateTime.now(ZONA_LIMA)));
     }
 
     /**
