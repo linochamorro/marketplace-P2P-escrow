@@ -33,6 +33,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -46,6 +47,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -71,6 +73,7 @@ import static org.mockito.Mockito.when;
  *   <li>Rechazo de corrección en 'APROBADA' con {@link CategoriaPublicacionInmutableException} y en estados no corregibles con {@link TransicionEstadoInvalidaException}.</li>
  *   <li>Eliminación definitiva de publicación propia en CUALQUIER estado (APROBADA, PENDIENTE_REVISION, OCULTA, CAMBIOS_SOLICITADOS, RECHAZADA) — corrección de Lino 2026-08-20 extendiendo Story 3.</li>
  *   <li>Rechazo de eliminación de una publicación con al menos una transacción asociada con {@link PublicacionConTransaccionesException} — decisión de Lino 2026-08-23 (PHA12).</li>
+ *   <li>Carga bajo lock pesimista ({@code findByIdWithLock}, {@code PESSIMISTIC_WRITE}) como PRIMERA operación de la eliminación, cerrando la ventana TOCTOU compra-vs-delete entre {@code existsByPublicacionId} y {@code delete} — endurecimiento de Lino 2026-08-23 (PHA12TSK07).</li>
  *   <li>Validación de propiedad ({@link NoEsElPropietarioException}) en corrección y eliminación.</li>
  * </ul>
  * </p>
@@ -1098,7 +1101,7 @@ class PublicacionServiceTests {
         publicacion.setId(60L);
         publicacion.setEstado(EstadoPublicacion.RECHAZADA);
 
-        when(publicacionRepository.findById(60L)).thenReturn(Optional.of(publicacion));
+        when(publicacionRepository.findByIdWithLock(60L)).thenReturn(Optional.of(publicacion));
 
         publicacionService.eliminarPublicacion(60L, 1L);
 
@@ -1146,11 +1149,11 @@ class PublicacionServiceTests {
         pRechazada.setId(64L);
         pRechazada.setEstado(EstadoPublicacion.RECHAZADA);
 
-        when(publicacionRepository.findById(61L)).thenReturn(Optional.of(pAprobada));
-        when(publicacionRepository.findById(62L)).thenReturn(Optional.of(pPendiente));
-        when(publicacionRepository.findById(63L)).thenReturn(Optional.of(pCambios));
-        when(publicacionRepository.findById(64L)).thenReturn(Optional.of(pRechazada));
-        when(publicacionRepository.findById(65L)).thenReturn(Optional.of(pOculta));
+        when(publicacionRepository.findByIdWithLock(61L)).thenReturn(Optional.of(pAprobada));
+        when(publicacionRepository.findByIdWithLock(62L)).thenReturn(Optional.of(pPendiente));
+        when(publicacionRepository.findByIdWithLock(63L)).thenReturn(Optional.of(pCambios));
+        when(publicacionRepository.findByIdWithLock(64L)).thenReturn(Optional.of(pRechazada));
+        when(publicacionRepository.findByIdWithLock(65L)).thenReturn(Optional.of(pOculta));
 
         // Eliminar en cada estado - no debe lanzar excepción
         publicacionService.eliminarPublicacion(61L, 1L);
@@ -1185,7 +1188,7 @@ class PublicacionServiceTests {
         publicacion.setId(64L);
         publicacion.setEstado(EstadoPublicacion.RECHAZADA);
 
-        when(publicacionRepository.findById(64L)).thenReturn(Optional.of(publicacion));
+        when(publicacionRepository.findByIdWithLock(64L)).thenReturn(Optional.of(publicacion));
 
         assertThatThrownBy(() -> publicacionService.eliminarPublicacion(64L, 999L))
             .isInstanceOf(NoEsElPropietarioException.class)
@@ -1214,7 +1217,7 @@ class PublicacionServiceTests {
         publicacion.setId(70L);
         publicacion.setEstado(EstadoPublicacion.APROBADA);
 
-        when(publicacionRepository.findById(70L)).thenReturn(Optional.of(publicacion));
+        when(publicacionRepository.findByIdWithLock(70L)).thenReturn(Optional.of(publicacion));
         when(transaccionRepository.existsByPublicacionId(70L)).thenReturn(true);
 
         assertThatThrownBy(() -> publicacionService.eliminarPublicacion(70L, 1L))
@@ -1243,12 +1246,66 @@ class PublicacionServiceTests {
         publicacion.setId(71L);
         publicacion.setEstado(EstadoPublicacion.RECHAZADA);
 
-        when(publicacionRepository.findById(71L)).thenReturn(Optional.of(publicacion));
+        when(publicacionRepository.findByIdWithLock(71L)).thenReturn(Optional.of(publicacion));
         when(transaccionRepository.existsByPublicacionId(71L)).thenReturn(false);
 
         publicacionService.eliminarPublicacion(71L, 1L);
 
         verify(transaccionRepository).existsByPublicacionId(71L);
         verify(publicacionRepository).delete(publicacion);
+    }
+
+    /**
+     * Verifica que la eliminación cargue la publicación mediante la consulta bajo lock pesimista
+     * {@code findByIdWithLock} y NO mediante el {@code findById} simple (PHA12TSK07; decisión de
+     * Lino 2026-08-23, plan.md "PHA12", fila "Endurecimiento TOCTOU compra-vs-delete"): cerrar la
+     * ventana entre {@code existsByPublicacionId} y {@code delete} exige que la MISMA operación que
+     * evalúa y elimina sea la que adquiere el {@code PESSIMISTIC_WRITE} sobre la fila padre.
+     * Verifica además con {@link InOrder} el orden interno lock → consulta de transacciones → delete.
+     */
+    @Test
+    @DisplayName("Debe cargar la publicación con findByIdWithLock (nunca findById simple) antes de evaluar transacciones y eliminar")
+    void eliminarPublicacion_FlujoExitoso_UsaCargaBajoLockYNoFindById() {
+        Usuario duenio = new Usuario("vendedor-bajolock@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(1L);
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        Publicacion publicacion = new Publicacion(duenio, categoria, subcategoria, 150000L, 5, "Laptop");
+        publicacion.setId(72L);
+        publicacion.setEstado(EstadoPublicacion.APROBADA);
+
+        when(publicacionRepository.findByIdWithLock(72L)).thenReturn(Optional.of(publicacion));
+        when(transaccionRepository.existsByPublicacionId(72L)).thenReturn(false);
+
+        publicacionService.eliminarPublicacion(72L, 1L);
+
+        verify(publicacionRepository).findByIdWithLock(72L);
+        verify(publicacionRepository, never()).findById(72L);
+
+        InOrder orden = inOrder(publicacionRepository, transaccionRepository);
+        orden.verify(publicacionRepository).findByIdWithLock(72L);
+        orden.verify(transaccionRepository).existsByPublicacionId(72L);
+        orden.verify(publicacionRepository).delete(publicacion);
+    }
+
+    /**
+     * Verifica que intentar eliminar una publicación inexistente lance {@link PublicacionNoEncontradaException}
+     * desde la carga bajo lock (Optional vacío), sin consultar transacciones ni invocar delete
+     * (PHA12TSK07: el contrato observable 404 se conserva con el nuevo mecanismo de carga).
+     */
+    @Test
+    @DisplayName("Debe lanzar PublicacionNoEncontradaException al eliminar una publicación inexistente (carga bajo lock vacía)")
+    void eliminarPublicacion_Inexistente_LanzaPublicacionNoEncontradaExceptionSinEliminar() {
+        when(publicacionRepository.findByIdWithLock(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> publicacionService.eliminarPublicacion(99L, 1L))
+            .isInstanceOf(PublicacionNoEncontradaException.class)
+            .hasMessageContaining("no encontrada");
+
+        verify(transaccionRepository, never()).existsByPublicacionId(99L);
+        verify(publicacionRepository, never()).delete(any(Publicacion.class));
     }
 }

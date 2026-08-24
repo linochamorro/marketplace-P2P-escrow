@@ -566,6 +566,17 @@ public class PublicacionService {
      * (constitution, principio 2). El histórico de motivos de moderación (V17,
      * {@code publicacion_motivos_historicos}) también sobrevive con {@code publicacion_id = NULL}.</p>
      *
+     * <p>Desde PHA12TSK07 (decisión de Lino 2026-08-23, plan.md "PHA12", fila "Endurecimiento
+     * TOCTOU compra-vs-delete"; riesgo declarado en {@code PHA12TSK01-L01-programmer.md},
+     * Riesgos §1) la carga inicial usa
+     * {@link PublicacionRepository#findByIdWithLock}, que adquiere un lock pesimista
+     * {@code PESSIMISTIC_WRITE} ({@code SELECT ... FOR UPDATE} en PostgreSQL) sobre la fila de la
+     * publicación ANTES de evaluar propiedad y transacciones: un INSERT concurrente en
+     * {@code transacciones} (webhook {@code payment_intent.succeeded}) debe bloquear contra ese
+     * lock de la fila padre y serializa, cerrando la ventana entre {@code existsByPublicacionId}
+     * y {@code delete}. Los códigos observables no cambian (204 sin transacciones, 409 con
+     * transacciones, 403 no dueño, 404 inexistente).</p>
+     *
      * @param publicacionId ID de la publicación a eliminar
      * @param usuarioId ID del usuario vendedor solicitante
      * @throws PublicacionNoEncontradaException si la publicación no existe
@@ -574,7 +585,8 @@ public class PublicacionService {
      */
     @Transactional
     public void eliminarPublicacion(Long publicacionId, Long usuarioId) {
-        Publicacion publicacion = obtenerPublicacionPorId(publicacionId);
+        Publicacion publicacion = publicacionRepository.findByIdWithLock(publicacionId)
+            .orElseThrow(() -> new PublicacionNoEncontradaException("Publicación con ID " + publicacionId + " no encontrada"));
 
         if (!publicacion.getUsuario().getId().equals(usuarioId)) {
             throw new NoEsElPropietarioException(
