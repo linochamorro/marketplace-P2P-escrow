@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   cargarCategorias,
@@ -11,6 +12,8 @@ import {
   type FiltrosListado,
   type PublicacionListado
 } from './publicaciones-utils';
+
+export { default as DetallePublicacion } from './DetallePublicacion';
 
 /** Props de transporte inyectable para aislar consultas reales en pruebas de componente. */
 export interface ListadoPublicacionesProps {
@@ -163,7 +166,7 @@ export default function ListadoPublicaciones({
             </div>
           </div>
           {errorMensaje && <p role="alert" className="border border-[#ba1a1a] bg-[#ffdad6] p-3 text-sm font-medium text-[#93000a]">{errorMensaje}</p>}
-          {cargando ? <div role="status" aria-busy="true" className="border border-slate-200 bg-white p-6 text-slate-600">Cargando publicaciones...</div> : publicaciones.length === 0 && cargado && !errorMensaje ? <div className="border border-slate-200 bg-white p-6 text-slate-600">No se encontraron publicaciones.</div> : <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{publicaciones.map((publicacion) => <li key={publicacion.id} className="space-y-3 border border-slate-200 bg-white p-6"><p className="text-base text-[#0F172A]">{publicacion.descripcion}</p><p className="font-mono text-xl font-semibold text-[#0F172A]">{formatearPrecioSoles(publicacion.precio)}</p><p className="text-sm text-slate-600">Stock: {publicacion.stock}</p><p className="font-mono text-xs text-slate-500">ID publicación: {publicacion.id} · Categoría: {publicacion.categoriaId} · Subcategoría: {publicacion.subcategoriaId} · Vendedor: {publicacion.usuarioId}</p></li>)}</ul>}
+          {cargando ? <div role="status" aria-busy="true" className="border border-slate-200 bg-white p-6 text-slate-600">Cargando publicaciones...</div> : publicaciones.length === 0 && cargado && !errorMensaje ? <div className="border border-slate-200 bg-white p-6 text-slate-600">No se encontraron publicaciones.</div> : <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">{publicaciones.map((publicacion) => <li key={publicacion.id} className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 transition-colors hover:border-[#0F172A]"><div className="space-y-3"><p className="text-base font-semibold text-[#0F172A]">{publicacion.descripcion}</p><p className="font-mono text-xl font-semibold text-[#0F172A]">{formatearPrecioSoles(publicacion.precio)}</p><p className="text-sm text-slate-600">Stock: {publicacion.stock}</p><p className="text-sm text-slate-600">{publicacion.usuarioEmail}</p></div><Link href={`/publicaciones/${publicacion.id}`} aria-label={`Ver detalle de ${publicacion.descripcion}`} className="mt-auto rounded border border-[#0F172A] bg-[#0F172A] px-4 py-2 text-center text-sm font-semibold text-white">Ver detalle</Link></li>)}</ul>}
         </section>
       </div>
     </main>

@@ -51,7 +51,9 @@ describe('PublicacionesPage (PHA05TSK04)', () => {
         descripcion: 'Laptop inicial',
         categoriaId: 10,
         subcategoriaId: 101,
-        usuarioId: 7
+        usuarioId: 7,
+        usuarioEmail: 'vendedor-inicial@example.com',
+        imagenFilename: null
       }
     ];
     const resultadosFiltrados = [
@@ -63,7 +65,9 @@ describe('PublicacionesPage (PHA05TSK04)', () => {
         descripcion: 'Laptop filtrada',
         categoriaId: 10,
         subcategoriaId: 101,
-        usuarioId: 8
+        usuarioId: 8,
+        usuarioEmail: 'vendedor-filtrada@example.com',
+        imagenFilename: null
       }
     ];
     const fetchMock = vi
@@ -91,5 +95,36 @@ describe('PublicacionesPage (PHA05TSK04)', () => {
     });
     expect(await screen.findByText('Laptop filtrada')).toBeInTheDocument();
     expect(screen.queryByText('Laptop inicial')).not.toBeInTheDocument();
+  });
+
+  it('enlaza una tarjeta real al detalle exacto y no expone identificadores internos decorativos', async () => {
+    const publicacion = {
+      id: 73,
+      precio: 125050,
+      stock: 4,
+      estado: 'APROBADA',
+      descripcion: 'Laptop profesional',
+      categoriaId: 10,
+      subcategoriaId: 101,
+      usuarioId: 8,
+      usuarioEmail: 'vendedor@example.com',
+      imagenFilename: null
+    };
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(respuestaOk([]))
+      .mockResolvedValueOnce(respuestaOk([publicacion]));
+
+    render(<PublicacionesPage />);
+
+    const enlace = await screen.findByRole('link', { name: /ver detalle de laptop profesional/i });
+    expect(enlace).toHaveAttribute('href', '/publicaciones/73');
+    expect(screen.getByText('S/ 1250.50')).toBeInTheDocument();
+    expect(screen.getByText('Stock: 4')).toBeInTheDocument();
+    expect(screen.getByText('vendedor@example.com')).toBeInTheDocument();
+    expect(screen.queryByText(/ID publicación/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Categoría:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Subcategoría:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Vendedor:/i)).not.toBeInTheDocument();
   });
 });
