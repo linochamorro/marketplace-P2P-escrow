@@ -91,3 +91,41 @@ WHERE NOT EXISTS (
     WHERE existente.usuario_id = u.id
       AND existente.descripcion = p.descripcion
 );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4. Imagen por publicación (PHA13TSK01): asigna imagen_filename a las 7 publicaciones
+--    del seed mapeando cada descripción EXACTA del INSERT anterior a un archivo real
+--    existente en frontend/public/imagenes/publicaciones/ (mapeo por coincidencia
+--    semántica, declarado en docs/avance/PHA13TSK01-L01-programmer.md).
+--
+--    Idempotencia: la guardia AND imagen_filename IS NULL garantiza que re-ejecuciones
+--    del seed (o bases donde ya corrió y el usuario asignó otra imagen) nunca
+--    sobrescriban una decisión de imagen previa — solo rellena valores aún nulos.
+-- ─────────────────────────────────────────────────────────────────────────────
+UPDATE publicaciones SET imagen_filename = 'auriculares-bluetooth.jpg'
+WHERE descripcion = 'Auriculares inalámbricos Bluetooth con cancelación de ruido'
+  AND imagen_filename IS NULL;
+
+UPDATE publicaciones SET imagen_filename = 'smartwatch-gps.jpg'
+WHERE descripcion = 'Smartwatch deportivo con GPS y monitor de ritmo cardíaco'
+  AND imagen_filename IS NULL;
+
+UPDATE publicaciones SET imagen_filename = 'mesa-centro-cedro.jpg'
+WHERE descripcion = 'Mesa de centro de madera de cedro de 90 cm'
+  AND imagen_filename IS NULL;
+
+UPDATE publicaciones SET imagen_filename = 'lampara-escritorio-led.jpg'
+WHERE descripcion = 'Lámpara de escritorio LED regulable'
+  AND imagen_filename IS NULL;
+
+UPDATE publicaciones SET imagen_filename = 'zapatillas-cuero-42.jpg'
+WHERE descripcion = 'Zapatillas urbanas de cuero talla 42'
+  AND imagen_filename IS NULL;
+
+UPDATE publicaciones SET imagen_filename = 'camisa-lino-azul.jpg'
+WHERE descripcion = 'Camisa de lino de manga larga color azul'
+  AND imagen_filename IS NULL;
+
+UPDATE publicaciones SET imagen_filename = 'auriculares-estudio.jpg'
+WHERE descripcion = 'Auriculares con cable de estudio'
+  AND imagen_filename IS NULL;

@@ -4,6 +4,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PublicacionesPage from './page';
 
 /**
+ * Mock local de `next/image`: jsdom no ejecuta el runtime ni el optimizador de imágenes de
+ * Next.js, por lo que el componente real emitiría `src="/_next/image?url=..."`. Se sustituye
+ * por un `<img>` de paso directo para asertar el contrato literal `src`/`alt` que la card
+ * recibe (misma técnica que el mock de `next/navigation` en AdminIntegracion.test.tsx).
+ * Vitest eleva esta declaración al inicio del archivo antes de cualquier import.
+ */
+vi.mock('next/image', () => ({
+  default: function ImageMock({ src, alt }: { src: string; alt: string }) {
+    // El <img> es intencional: este archivo es un doble de prueba del componente real,
+    // no un render productivo; se suprime solo aquí la regla no-img-element.
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt={alt} />;
+  }
+}));
+
+/**
  * @file page.test.tsx
  * @description Prueba de componente para el listado filtrable de publicaciones (PHA05TSK04).
  *
@@ -108,7 +124,7 @@ describe('PublicacionesPage (PHA05TSK04)', () => {
       subcategoriaId: 101,
       usuarioId: 8,
       usuarioEmail: 'vendedor@example.com',
-      imagenFilename: null
+      imagenFilename: 'auriculares-estudio.jpg'
     };
     global.fetch = vi
       .fn()
@@ -119,6 +135,7 @@ describe('PublicacionesPage (PHA05TSK04)', () => {
 
     const enlace = await screen.findByRole('link', { name: /ver detalle de laptop profesional/i });
     expect(enlace).toHaveAttribute('href', '/publicaciones/73');
+    expect(screen.getByRole('img', { name: /laptop profesional/i })).toHaveAttribute('src', '/imagenes/publicaciones/auriculares-estudio.jpg');
     expect(screen.getByText('S/ 1250.50')).toBeInTheDocument();
     expect(screen.getByText('Stock: 4')).toBeInTheDocument();
     expect(screen.getByText('vendedor@example.com')).toBeInTheDocument();
@@ -126,5 +143,39 @@ describe('PublicacionesPage (PHA05TSK04)', () => {
     expect(screen.queryByText(/Categoría:/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Subcategoría:/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Vendedor:/i)).not.toBeInTheDocument();
+  });
+
+  it('muestra la imagen del producto con su ruta completa cuando la tarjeta tiene imagenFilename y omite el elemento img cuando es nulo', async () => {
+    const conImagen = {
+      id: 91,
+      precio: 18900,
+      stock: 5,
+      estado: 'APROBADA',
+      descripcion: 'Auriculares demo con imagen',
+      categoriaId: 10,
+      subcategoriaId: 101,
+      usuarioId: 8,
+      usuarioEmail: 'vendedor-con-imagen@example.com',
+      imagenFilename: 'auriculares-estudio.jpg'
+    };
+    const sinImagen = {
+      ...conImagen,
+      id: 92,
+      descripcion: 'Producto demo sin imagen',
+      usuarioEmail: 'vendedor-sin-imagen@example.com',
+      imagenFilename: null
+    };
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(respuestaOk([]))
+      .mockResolvedValueOnce(respuestaOk([conImagen, sinImagen]));
+
+    render(<PublicacionesPage />);
+
+    expect(await screen.findByRole('img', { name: /auriculares demo con imagen/i })).toHaveAttribute(
+      'src',
+      '/imagenes/publicaciones/auriculares-estudio.jpg'
+    );
+    expect(screen.queryByRole('img', { name: /producto demo sin imagen/i })).not.toBeInTheDocument();
   });
 });

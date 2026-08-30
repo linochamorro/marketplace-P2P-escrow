@@ -15,6 +15,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -212,6 +213,45 @@ class SeedDemoDevIntegrationTests {
                 .as("stripe_refund_outbox debe permanecer vacía").isZero();
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM admin_acciones", Integer.class))
                 .as("admin_acciones debe permanecer vacía").isZero();
+    }
+
+    /**
+     * Verifica que el seed dev asigna {@code imagen_filename} a las siete publicaciones de
+     * demostración según el mapeo descripción → archivo declarado en PHA13TSK01 (coincidencia
+     * semántica contra archivos reales existentes en {@code frontend/public/imagenes/publicaciones/}).
+     *
+     * <p>Los UPDATEs del seed usan la guardia {@code AND imagen_filename IS NULL}, por lo que la
+     * asignación es idempotente y no sobrescribe decisiones de imagen ya tomadas por el usuario
+     * en bases donde el seed corrió previamente (en una BD limpia de Testcontainers todas las
+     * filas nacen con NULL, así que aquí se verifica exactamente el mapeo completo).</p>
+     */
+    @Test
+    @DisplayName("El seed dev asigna imagen_filename a las 7 publicaciones según el mapeo declarado")
+    void seedDev_asignaImagenFilenameSegunMapeoDeclarado() {
+        Map<String, String> mapeoEsperado = Map.of(
+                "Auriculares inalámbricos Bluetooth con cancelación de ruido", "auriculares-bluetooth.jpg",
+                "Smartwatch deportivo con GPS y monitor de ritmo cardíaco", "smartwatch-gps.jpg",
+                "Mesa de centro de madera de cedro de 90 cm", "mesa-centro-cedro.jpg",
+                "Lámpara de escritorio LED regulable", "lampara-escritorio-led.jpg",
+                "Zapatillas urbanas de cuero talla 42", "zapatillas-cuero-42.jpg",
+                "Camisa de lino de manga larga color azul", "camisa-lino-azul.jpg",
+                "Auriculares con cable de estudio", "auriculares-estudio.jpg");
+
+        List<Map<String, Object>> filas = jdbcTemplate.queryForList(
+                "SELECT descripcion, imagen_filename FROM publicaciones");
+        assertThat(filas).as("el seed debe haber creado las publicaciones de demostración")
+                .hasSize(PUBLICACIONES_ESPERADAS);
+
+        for (Map<String, Object> fila : filas) {
+            String descripcion = (String) fila.get("descripcion");
+            assertThat(descripcion)
+                    .as("descripción inesperada encontrada en publicaciones del seed: %s", descripcion)
+                    .isIn(mapeoEsperado.keySet());
+            assertThat((String) fila.get("imagen_filename"))
+                    .as("la publicación '%s' debe tener imagen_filename según el mapeo", descripcion)
+                    .isNotNull()
+                    .isEqualTo(mapeoEsperado.get(descripcion));
+        }
     }
 
     /**
