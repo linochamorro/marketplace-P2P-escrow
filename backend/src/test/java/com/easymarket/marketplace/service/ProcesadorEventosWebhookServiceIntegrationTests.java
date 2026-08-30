@@ -6,6 +6,7 @@ import com.easymarket.marketplace.model.EstadoPublicacion;
 import com.easymarket.marketplace.model.Publicacion;
 import com.easymarket.marketplace.model.Rol;
 import com.easymarket.marketplace.model.Subcategoria;
+import com.easymarket.marketplace.model.Transaccion;
 import com.easymarket.marketplace.model.Usuario;
 import com.easymarket.marketplace.repository.CategoriaRepository;
 import com.easymarket.marketplace.repository.IdempotencyKeyRepository;
@@ -25,6 +26,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.ZonedDateTime;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,8 +45,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>El objeto {@link Event} de Stripe se construye manualmente para los tests (solo se usan
  * {@code event.getId()} y {@code event.getType()}, no se necesita deserializar el
- * {@code data.object} real), siguiendo la Opción A de diseño (parámetros extra
- * {@code compradorId}, {@code publicacionId}, {@code paymentIntentId} pasados por separado).</p>
+ * {@code data.object} real); los parámetros {@code compradorId}, {@code publicacionId} y
+ * {@code paymentIntentId} se proporcionan por separado conforme a la firma actual.</p>
  */
 @SpringBootTest
 @Testcontainers
@@ -105,7 +107,7 @@ class ProcesadorEventosWebhookServiceIntegrationTests {
 
         long precio = 299900L;
         Publicacion publicacion = publicacionService.crearPublicacion(
-            vendedor.getId(), categoria.getId(), subcategoria.getId(), precio, 1, "Artículo para test de idempotencia"
+            vendedor.getId(), categoria.getId(), subcategoria.getId(), precio, 1, "Artículo para test de idempotencia", null
         );
         publicacionService.cambiarEstado(publicacion.getId(), EstadoPublicacion.APROBADA, null);
 
@@ -132,6 +134,15 @@ class ProcesadorEventosWebhookServiceIntegrationTests {
             "SELECT COUNT(*) FROM transacciones WHERE publicacion_id = ?", Integer.class, publicacion.getId()
         );
         assertThat(transaccionesCountFinal).isEqualTo(1);
+
+        Integer avisosVendedorCountFinal = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM notificaciones n "
+                + "JOIN transacciones t ON t.id = n.transaccion_id "
+                + "WHERE n.usuario_id = ? AND n.tipo = 'COMPRA_CONFIRMADA' "
+                + "AND t.publicacion_id = ?",
+            Integer.class, vendedor.getId(), publicacion.getId()
+        );
+        assertThat(avisosVendedorCountFinal).isEqualTo(1);
     }
 
     /**
@@ -154,7 +165,7 @@ class ProcesadorEventosWebhookServiceIntegrationTests {
 
         long precio = 150000L;
         Publicacion publicacion = publicacionService.crearPublicacion(
-            vendedor.getId(), categoria.getId(), subcategoria.getId(), precio, 1, "Artículo para test succeeded"
+            vendedor.getId(), categoria.getId(), subcategoria.getId(), precio, 1, "Artículo para test succeeded", null
         );
         publicacionService.cambiarEstado(publicacion.getId(), EstadoPublicacion.APROBADA, null);
 
@@ -165,7 +176,8 @@ class ProcesadorEventosWebhookServiceIntegrationTests {
         event.setId(eventId);
         event.setType("payment_intent.succeeded");
 
-        procesadorEventosWebhookService.procesarEvento(event, comprador.getId(), publicacion.getId(), paymentIntentId);
+        Transaccion transaccion = procesadorEventosWebhookService.procesarEvento(
+            event, comprador.getId(), publicacion.getId(), paymentIntentId);
 
         // Verificar que exactamente una transacción 'reservada' fue creada
         Integer totalTransacciones = jdbcTemplate.queryForObject(
@@ -188,6 +200,28 @@ class ProcesadorEventosWebhookServiceIntegrationTests {
             "SELECT stock FROM publicaciones WHERE id = ?", Integer.class, publicacion.getId()
         );
         assertThat(stockFinal).isZero();
+
+        Integer avisosVendedor = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM notificaciones n "
+                + "JOIN transacciones t ON t.id = n.transaccion_id "
+                + "WHERE n.usuario_id = ? AND n.transaccion_id = t.id "
+                + "AND n.tipo = 'COMPRA_CONFIRMADA' AND t.publicacion_id = ?",
+            Integer.class, vendedor.getId(), publicacion.getId());
+        assertThat(avisosVendedor).isEqualTo(1);
+
+        Map<String, Object> avisoVendedor = jdbcTemplate.queryForMap(
+            "SELECT n.usuario_id, n.tipo, n.transaccion_id, n.publicacion_id, n.mensaje "
+                + "FROM notificaciones n "
+                + "WHERE n.usuario_id = ? AND n.tipo = 'COMPRA_CONFIRMADA' "
+                + "AND n.transaccion_id = ? AND n.publicacion_id = ?",
+            vendedor.getId(), transaccion.getId(), publicacion.getId());
+        assertThat(avisoVendedor.get("usuario_id")).isEqualTo(vendedor.getId());
+        assertThat(avisoVendedor.get("tipo")).isEqualTo("COMPRA_CONFIRMADA");
+        assertThat(avisoVendedor.get("transaccion_id")).isEqualTo(transaccion.getId());
+        assertThat(avisoVendedor.get("publicacion_id")).isEqualTo(publicacion.getId());
+        assertThat(avisoVendedor.get("mensaje").toString())
+            .contains("Nueva compra confirmada en tu publicación #" + publicacion.getId())
+            .contains("transacción #" + transaccion.getId());
     }
 
     /**
@@ -209,7 +243,7 @@ class ProcesadorEventosWebhookServiceIntegrationTests {
         Subcategoria subcategoria = subcategoriaRepository.save(new Subcategoria(categoria, "Subcategoría fail " + sufijo));
 
         Publicacion publicacion = publicacionService.crearPublicacion(
-            vendedor.getId(), categoria.getId(), subcategoria.getId(), 10000L, 5, "Artículo para test payment_failed"
+            vendedor.getId(), categoria.getId(), subcategoria.getId(), 10000L, 5, "Artículo para test payment_failed", null
         );
         publicacionService.cambiarEstado(publicacion.getId(), EstadoPublicacion.APROBADA, null);
 
