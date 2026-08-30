@@ -39,6 +39,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -546,6 +547,58 @@ public class PublicacionControllerIntegrationTests {
                 .andExpect(jsonPath("$.estado").value("APROBADA"));
     }
 
+    /**
+     * Verifica que el dueño pueda editar los campos permitidos de una publicación pendiente mediante el contrato HTTP.
+     *
+     * <p>La respuesta conserva el estado de moderación y las referencias de categoría, y propaga
+     * {@code imagenFilename} junto con precio, stock y descripción.</p>
+     *
+     * @throws Exception si MockMvc no puede completar la solicitud autenticada
+     */
+    @Test
+    @DisplayName("PATCH /publicaciones/{id} por dueño edita publicación PENDIENTE_REVISION y conserva estado y categorías")
+    void editarPublicacion_DuenioPendienteRevision_Retorna200ConCamposPermitidos() throws Exception {
+        Publicacion publicacion = publicacionRepository.save(new Publicacion(
+                usuarioRegular,
+                categoriaVehiculos,
+                subcategoriaAutos,
+                100000L,
+                5,
+                "Descripción pendiente"
+        ));
+
+        Cookie cookieDuenio = obtenerCookieJwtPostLogin(usuarioRegular.getEmail(), passwordRaw);
+
+        mockMvc.perform(patch("/publicaciones/" + publicacion.getId())
+                        .cookie(cookieDuenio)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "precio", 150000L,
+                                "stock", 3,
+                                "descripcion", "Descripción pendiente editada",
+                                "imagenFilename", "producto-pendiente.jpg"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.precio").value(150000L))
+                .andExpect(jsonPath("$.stock").value(3))
+                .andExpect(jsonPath("$.descripcion").value("Descripción pendiente editada"))
+                .andExpect(jsonPath("$.imagenFilename").value("producto-pendiente.jpg"))
+                .andExpect(jsonPath("$.estado").value("PENDIENTE_REVISION"))
+                 .andExpect(jsonPath("$.categoriaId").value(categoriaVehiculos.getId()))
+                 .andExpect(jsonPath("$.subcategoriaId").value(subcategoriaAutos.getId()))
+                 .andExpect(jsonPath("$.usuarioId").value(usuarioRegular.getId()));
+
+         Publicacion persistida = publicacionRepository.findById(publicacion.getId()).orElseThrow();
+         assertThat(persistida.getPrecio()).isEqualTo(150000L);
+         assertThat(persistida.getStock()).isEqualTo(3);
+         assertThat(persistida.getDescripcion()).isEqualTo("Descripción pendiente editada");
+         assertThat(persistida.getImagenFilename()).isEqualTo("producto-pendiente.jpg");
+         assertThat(persistida.getEstado()).isEqualTo(EstadoPublicacion.PENDIENTE_REVISION);
+         assertThat(persistida.getUsuario().getId()).isEqualTo(usuarioRegular.getId());
+         assertThat(persistida.getCategoria().getId()).isEqualTo(categoriaVehiculos.getId());
+         assertThat(persistida.getSubcategoria().getId()).isEqualTo(subcategoriaAutos.getId());
+     }
+
     @Test
     @DisplayName("PATCH /publicaciones/{id} cuando stock se edita a 0 transiciona automáticamente a OCULTA (Story 10)")
     void editarPublicacion_StockCero_TransicionaAEstadoOculta() throws Exception {
@@ -576,7 +629,7 @@ public class PublicacionControllerIntegrationTests {
     }
 
     @Test
-    @DisplayName("PATCH /publicaciones/{id} en estado no APROBADA retorna 409 Conflict")
+    @DisplayName("PATCH /publicaciones/{id} en estado CAMBIOS_SOLICITADOS retorna 409 Conflict")
     void editarPublicacion_EstadoNoAprobada_Retorna409Conflict() throws Exception {
         com.easymarket.marketplace.model.Publicacion publicacion = publicacionRepository.save(
                 new com.easymarket.marketplace.model.Publicacion(
@@ -587,7 +640,9 @@ public class PublicacionControllerIntegrationTests {
                         5,
                         "Producto pendiente"
                 )
-        ); // Estado por defecto PENDIENTE_REVISION
+        );
+        publicacion.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
+        publicacionRepository.save(publicacion);
 
         Cookie cookieDuenio = obtenerCookieJwtPostLogin(usuarioRegular.getEmail(), passwordRaw);
 
@@ -868,5 +923,72 @@ public class PublicacionControllerIntegrationTests {
     void listarPorUsuario_SinAutenticacion_Retorna403() throws Exception {
         mockMvc.perform(get("/publicaciones/mias"))
                 .andExpect(status().isForbidden());
+    }
+
+    // =========================================================================
+    // PHA15TSK01 - Tests Red phase para imagenFilename en creación (integración)
+    // =========================================================================
+
+    /**
+     * Verifica que POST /publicaciones acepte y devuelva imagenFilename en la respuesta
+     * (PHA15TSK01: habilitar campo imagenFilename en creación).
+     * Este test DEBE FALLAR en Red phase porque el DTO/request no incluye imagenFilename.
+     */
+    @Test
+    @DisplayName("POST /publicaciones con imagenFilename retorna 201 y devuelve imagenFilename en la respuesta")
+    void crearPublicacion_ConImagenFilename_Retorna201ConImagenFilename() throws Exception {
+        Cookie cookieVendedor = obtenerCookieJwtPostLogin(usuarioRegular.getEmail(), passwordRaw);
+
+        mockMvc.perform(post("/publicaciones")
+                        .cookie(cookieVendedor)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "precio", 2500000L,
+                                "stock", 3,
+                                "categoriaId", categoriaVehiculos.getId(),
+                                "subcategoriaId", subcategoriaAutos.getId(),
+                                "descripcion", "Toyota Corolla 2022 seminuevo",
+                                "imagenFilename", "toyota-corolla.jpg"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.precio").value(2500000L))
+                .andExpect(jsonPath("$.stock").value(3))
+                .andExpect(jsonPath("$.estado").value("PENDIENTE_REVISION"))
+                .andExpect(jsonPath("$.descripcion").value("Toyota Corolla 2022 seminuevo"))
+                .andExpect(jsonPath("$.categoriaId").value(categoriaVehiculos.getId()))
+                .andExpect(jsonPath("$.subcategoriaId").value(subcategoriaAutos.getId()))
+                .andExpect(jsonPath("$.usuarioId").value(usuarioRegular.getId()))
+                .andExpect(jsonPath("$.imagenFilename").value("toyota-corolla.jpg"));
+
+        assertThat(publicacionRepository.count()).isEqualTo(1);
+        assertThat(publicacionRepository.findAll().get(0).getImagenFilename()).isEqualTo("toyota-corolla.jpg");
+    }
+
+    /**
+     * Verifica que POST /publicaciones sin imagenFilename (null/ausente) funcione correctamente
+     * y devuelva null en imagenFilename.
+     */
+    @Test
+    @DisplayName("POST /publicaciones sin imagenFilename retorna 201 con imagenFilename null")
+    void crearPublicacion_SinImagenFilename_Retorna201ConImagenFilenameNull() throws Exception {
+        Cookie cookieVendedor = obtenerCookieJwtPostLogin(usuarioRegular.getEmail(), passwordRaw);
+
+        mockMvc.perform(post("/publicaciones")
+                        .cookie(cookieVendedor)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "precio", 1500000L,
+                                "stock", 1,
+                                "categoriaId", categoriaVehiculos.getId(),
+                                "subcategoriaId", subcategoriaAutos.getId(),
+                                "descripcion", "Auto sin imagen"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.imagenFilename").doesNotExist());
+
+        assertThat(publicacionRepository.count()).isEqualTo(1);
+        assertThat(publicacionRepository.findAll().get(0).getImagenFilename()).isNull();
     }
 }

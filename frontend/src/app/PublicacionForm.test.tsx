@@ -63,7 +63,7 @@ describe('PublicacionForm (PHA06TSK10)', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ precio: 1234, stock: 2, categoriaId: 9, subcategoriaId: 91, descripcion: 'Mesa' })
+      body: JSON.stringify({ precio: 1234, stock: 2, categoriaId: 9, subcategoriaId: 91, descripcion: 'Mesa', imagenFilename: '' })
     }));
   });
 
@@ -88,7 +88,7 @@ describe('PublicacionForm (PHA06TSK10)', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ precio: 1509, stock: 5, categoriaId: 9, subcategoriaId: 92, descripcion: 'Lámpara' })
+      body: JSON.stringify({ precio: 1509, stock: 5, categoriaId: 9, subcategoriaId: 92, descripcion: 'Lámpara', imagenFilename: '' })
     }));
     expect(onSuccess).toHaveBeenCalledOnce();
   });
@@ -115,5 +115,63 @@ describe('PublicacionForm (PHA06TSK10)', () => {
     render(<PublicacionForm />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Catálogo temporalmente fuera de servicio');
     expect(screen.getByRole('button', { name: 'Publicar' })).toBeDisabled();
+  });
+
+  // =========================================================================
+  // PHA15TSK01 - Tests Red phase para imagenFilename en creación
+  // =========================================================================
+
+  it('formulario de creación incluye input imagenFilename con placeholder y aria-label (PHA15TSK01)', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => CATEGORIAS })
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 99, imagenFilename: 'nueva-imagen.jpg' }) });
+    global.fetch = fetchMock;
+    render(<PublicacionForm />);
+
+    await screen.findByRole('option', { name: 'Servicios' });
+    // Verificar que existe el input imagenFilename
+    expect(screen.getByLabelText(/imagen \(archivo\)/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/imagen \(archivo\)/i)).toHaveAttribute('placeholder', 'producto.jpg');
+    expect(screen.getByLabelText(/imagen \(archivo\)/i)).toHaveAttribute('aria-label', 'Imagen (archivo)');
+
+    // Rellenar formulario incluyendo imagenFilename
+    fireEvent.change(screen.getByLabelText(/precio \(S\/\)/i), { target: { value: '10.00' } });
+    fireEvent.change(screen.getByLabelText(/stock/i), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/^categoría$/i), { target: { value: '9' } });
+    fireEvent.change(screen.getByLabelText(/^subcategoría$/i), { target: { value: '91' } });
+    fireEvent.change(screen.getByLabelText(/descripción/i), { target: { value: 'Producto con imagen' } });
+    fireEvent.change(screen.getByLabelText(/imagen \(archivo\)/i), { target: { value: 'nueva-imagen.jpg' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('http://localhost:8080/publicaciones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ precio: 1000, stock: 1, categoriaId: 9, subcategoriaId: 91, descripcion: 'Producto con imagen', imagenFilename: 'nueva-imagen.jpg' })
+    }));
+  });
+
+  it('formulario de creación funciona sin imagenFilename (campo opcional)', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => CATEGORIAS })
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 100 }) });
+    global.fetch = fetchMock;
+    render(<PublicacionForm />);
+
+    await screen.findByRole('option', { name: 'Servicios' });
+    // No rellenar imagenFilename (debe ser opcional)
+    fireEvent.change(screen.getByLabelText(/precio \(S\/\)/i), { target: { value: '10.00' } });
+    fireEvent.change(screen.getByLabelText(/stock/i), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/^categoría$/i), { target: { value: '9' } });
+    fireEvent.change(screen.getByLabelText(/^subcategoría$/i), { target: { value: '91' } });
+    fireEvent.change(screen.getByLabelText(/descripción/i), { target: { value: 'Producto sin imagen' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('http://localhost:8080/publicaciones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ precio: 1000, stock: 1, categoriaId: 9, subcategoriaId: 91, descripcion: 'Producto sin imagen', imagenFilename: '' })
+    }));
   });
 });

@@ -15,6 +15,7 @@ import jakarta.validation.constraints.NotNull;
  * @param categoriaId identificador de la categoría raíz seleccionada
  * @param subcategoriaId identificador de la subcategoría seleccionada
  * @param descripcion texto explicativo con los detalles del producto en venta
+ * @param imagenFilename nombre de archivo de imagen opcional (sin prefijo de URL)
  */
 public record PublicacionRequestDto(
         @NotNull(message = "El precio es obligatorio")
@@ -32,6 +33,8 @@ public record PublicacionRequestDto(
         Long subcategoriaId,
 
         @NotBlank(message = "La descripción no puede estar vacía")
-        String descripcion
+        String descripcion,
+
+        String imagenFilename
 ) {
 }

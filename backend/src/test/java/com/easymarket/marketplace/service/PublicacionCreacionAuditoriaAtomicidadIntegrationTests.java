@@ -91,7 +91,8 @@ class PublicacionCreacionAuditoriaAtomicidadIntegrationTests {
     @DisplayName("Fallo de save aviso revierte publicación evento y aviso")
     void crearPublicacion_FallaSaveAviso_RevierteTresEfectos() {
         verificarRollback("aviso", () -> doThrow(new DataIntegrityViolationException("fallo aviso"))
-            .when(notificacionRepository).save(any(Notificacion.class)));
+            .when(notificacionRepository).upsertPublicacion(any(Long.class), any(Long.class), any(String.class),
+                any(String.class), any(java.time.ZonedDateTime.class)));
     }
 
     /**
@@ -105,7 +106,7 @@ class PublicacionCreacionAuditoriaAtomicidadIntegrationTests {
         Conteos antes = conteos();
         prepararFallo.run();
         assertThatThrownBy(() -> publicacionService.crearPublicacion(datos.vendedorId(), datos.categoriaId(),
-            datos.subcategoriaId(), 150000L, 2, "Publicación " + sufijo))
+            datos.subcategoriaId(), 150000L, 2, "Publicación " + sufijo, null))
             .isInstanceOf(DataIntegrityViolationException.class);
         assertThat(conteos()).isEqualTo(antes);
     }

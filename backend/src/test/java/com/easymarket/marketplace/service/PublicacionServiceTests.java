@@ -68,7 +68,8 @@ import static org.mockito.Mockito.when;
  *   <li>Transiciones de estado válidas conforme a la máquina de estados oficial.</li>
  *   <li>Edición de publicación aprobada (Story 3): actualización de precio, stock (≥0) y descripción.</li>
  *   <li>Bloqueo de modificación de categoría/subcategoría en publicación aprobada con {@link CategoriaPublicacionInmutableException}.</li>
- *   <li>Rechazo de edición en estados distintos a 'APROBADA' con {@link EstadoPublicacionNoEditableException}.</li>
+     *   <li>Rechazo de edición en estados distintos a 'PENDIENTE_REVISION', 'APROBADA' u 'OCULTA' con
+     *   {@link EstadoPublicacionNoEditableException}.</li>
  *   <li>Corrección de categoría/subcategoría desde 'CAMBIOS_SOLICITADOS' o 'RECHAZADA' con reenvío a 'PENDIENTE_REVISION' (Story 3).</li>
  *   <li>Rechazo de corrección en 'APROBADA' con {@link CategoriaPublicacionInmutableException} y en estados no corregibles con {@link TransicionEstadoInvalidaException}.</li>
  *   <li>Eliminación definitiva de publicación propia en CUALQUIER estado (APROBADA, PENDIENTE_REVISION, OCULTA, CAMBIOS_SOLICITADOS, RECHAZADA) — corrección de Lino 2026-08-20 extendiendo Story 3.</li>
@@ -138,7 +139,7 @@ class PublicacionServiceTests {
         when(publicacionRepository.save(any(Publicacion.class))).thenReturn(publicacionGuardada);
 
         Publicacion resultado = publicacionService.crearPublicacion(
-            1L, 10L, 100L, 150000L, 5, "Laptop Core i7"
+            1L, 10L, 100L, 150000L, 5, "Laptop Core i7", null
         );
 
         assertThat(resultado.getId()).isEqualTo(500L);
@@ -147,7 +148,7 @@ class PublicacionServiceTests {
         assertThat(resultado.getStock()).isEqualTo(5);
 
         verify(publicacionRepository).save(any(Publicacion.class));
-        verify(notificacionService).crearNotificacionAdmin(eq("PUBLICACION_PENDIENTE_APROBAR"), anyString(), isNull(), any());
+         verify(notificacionService).crearNotificacionAdmin(eq("PUBLICACION_PENDIENTE_APROBAR"), anyString(), any(Publicacion.class), isNull(), any());
     }
 
     /**
@@ -175,7 +176,7 @@ class PublicacionServiceTests {
         when(publicacionRepository.save(any(Publicacion.class))).thenReturn(publicacionGuardada);
         lenient().when(notificacionService.crearNotificacionAdmin(anyString(), anyString(), any(), any())).thenReturn(mock(Notificacion.class));
 
-        Publicacion resultado = publicacionService.crearPublicacion(1L, 10L, 100L, 150000L, 5, "Laptop Core i7");
+        Publicacion resultado = publicacionService.crearPublicacion(1L, 10L, 100L, 150000L, 5, "Laptop Core i7", null);
 
         assertThat(resultado).isSameAs(publicacionGuardada);
         ArgumentCaptor<PublicacionEvento> eventoCaptor = ArgumentCaptor.forClass(PublicacionEvento.class);
@@ -183,7 +184,7 @@ class PublicacionServiceTests {
         assertThat(eventoCaptor.getValue().getPublicacion()).isSameAs(publicacionGuardada);
         assertThat(eventoCaptor.getValue().getActor()).isSameAs(vendedor);
         assertThat(eventoCaptor.getValue().getTipo()).isEqualTo("CREADA");
-        verify(notificacionService).crearNotificacionAdmin(eq("PUBLICACION_PENDIENTE_APROBAR"), anyString(), isNull(), any());
+         verify(notificacionService).crearNotificacionAdmin(eq("PUBLICACION_PENDIENTE_APROBAR"), anyString(), any(Publicacion.class), isNull(), any());
     }
 
     /**
@@ -192,11 +193,11 @@ class PublicacionServiceTests {
     @Test
     @DisplayName("Debe lanzar PrecioInvalidoException cuando el precio es menor o igual a cero")
     void crearPublicacion_PrecioCeroONegativo_LanzaPrecioInvalidoException() {
-        assertThatThrownBy(() -> publicacionService.crearPublicacion(1L, 10L, 100L, 0L, 5, "Descripción"))
+        assertThatThrownBy(() -> publicacionService.crearPublicacion(1L, 10L, 100L, 0L, 5, "Descripción", null))
             .isInstanceOf(PrecioInvalidoException.class)
             .hasMessageContaining("El precio debe ser un monto entero positivo mayor a cero");
 
-        assertThatThrownBy(() -> publicacionService.crearPublicacion(1L, 10L, 100L, -5000L, 5, "Descripción"))
+        assertThatThrownBy(() -> publicacionService.crearPublicacion(1L, 10L, 100L, -5000L, 5, "Descripción", null))
             .isInstanceOf(PrecioInvalidoException.class);
 
         verify(publicacionRepository, never()).save(any(Publicacion.class));
@@ -208,11 +209,11 @@ class PublicacionServiceTests {
     @Test
     @DisplayName("Debe lanzar StockInvalidoException cuando el stock inicial es menor a uno")
     void crearPublicacion_StockCeroONegativo_LanzaStockInvalidoException() {
-        assertThatThrownBy(() -> publicacionService.crearPublicacion(1L, 10L, 100L, 1000L, 0, "Descripción"))
+        assertThatThrownBy(() -> publicacionService.crearPublicacion(1L, 10L, 100L, 1000L, 0, "Descripción", null))
             .isInstanceOf(StockInvalidoException.class)
             .hasMessageContaining("El stock inicial debe ser al menos de 1 unidad");
 
-        assertThatThrownBy(() -> publicacionService.crearPublicacion(1L, 10L, 100L, 1000L, -2, "Descripción"))
+        assertThatThrownBy(() -> publicacionService.crearPublicacion(1L, 10L, 100L, 1000L, -2, "Descripción", null))
             .isInstanceOf(StockInvalidoException.class);
 
         verify(publicacionRepository, never()).save(any(Publicacion.class));
@@ -226,7 +227,7 @@ class PublicacionServiceTests {
     void crearPublicacion_UsuarioInexistente_LanzaUsuarioNoEncontradoException() {
         when(usuarioRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> publicacionService.crearPublicacion(999L, 10L, 100L, 5000L, 2, "Descripción"))
+        assertThatThrownBy(() -> publicacionService.crearPublicacion(999L, 10L, 100L, 5000L, 2, "Descripción", null))
             .isInstanceOf(UsuarioNoEncontradoException.class)
             .hasMessageContaining("Usuario vendedor con ID 999 no encontrado");
 
@@ -245,7 +246,7 @@ class PublicacionServiceTests {
         when(usuarioRepository.findById(2L)).thenReturn(Optional.of(usuario));
         when(categoriaRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> publicacionService.crearPublicacion(2L, 999L, 100L, 5000L, 2, "Descripción"))
+        assertThatThrownBy(() -> publicacionService.crearPublicacion(2L, 999L, 100L, 5000L, 2, "Descripción", null))
             .isInstanceOf(CategoriaNoEncontradaException.class)
             .hasMessageContaining("Categoría raíz con ID 999 no encontrada");
 
@@ -268,7 +269,7 @@ class PublicacionServiceTests {
         when(categoriaRepository.findById(20L)).thenReturn(Optional.of(categoria));
         when(subcategoriaRepository.findById(888L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> publicacionService.crearPublicacion(3L, 20L, 888L, 5000L, 2, "Descripción"))
+        assertThatThrownBy(() -> publicacionService.crearPublicacion(3L, 20L, 888L, 5000L, 2, "Descripción", null))
             .isInstanceOf(CategoriaNoEncontradaException.class)
             .hasMessageContaining("Subcategoría con ID 888 no encontrada");
 
@@ -298,7 +299,7 @@ class PublicacionServiceTests {
         when(categoriaRepository.findById(10L)).thenReturn(Optional.of(categoriaElectrónica));
         when(subcategoriaRepository.findById(200L)).thenReturn(Optional.of(subcategoriaMuebles));
 
-        assertThatThrownBy(() -> publicacionService.crearPublicacion(4L, 10L, 200L, 5000L, 2, "Descripción"))
+        assertThatThrownBy(() -> publicacionService.crearPublicacion(4L, 10L, 200L, 5000L, 2, "Descripción", null))
             .isInstanceOf(SubcategoriaNoPerteneceACategoriaException.class)
             .hasMessageContaining("La subcategoría 'Muebles' (ID 200) no pertenece a la categoría con ID 10");
 
@@ -573,6 +574,45 @@ class PublicacionServiceTests {
     }
 
     /**
+     * Verifica que el propietario pueda editar una publicación pendiente sin cambiar su estado ni su clasificación.
+     *
+     * <p>La edición pasa por {@link PublicacionService#editarPublicacionDuenio}, por lo que también cubre la
+     * comprobación de propiedad y la propagación del campo opcional {@code imagenFilename} hasta el guardado.</p>
+     *
+     * @throws EstadoPublicacionNoEditableException si el estado pendiente no estuviera habilitado para edición
+     */
+    @Test
+    @DisplayName("Debe permitir al propietario editar precio, stock, descripción e imagen en PENDIENTE_REVISION")
+    void editarPublicacionDuenio_PendienteRevision_EditaCamposYConservaEstadoYCategorias() {
+        Usuario duenio = new Usuario("vendedor-pendiente@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(7L);
+        Categoria categoria = new Categoria("Tecnología");
+        categoria.setId(70L);
+        Subcategoria subcategoria = new Subcategoria(categoria, "Gadgets");
+        subcategoria.setId(700L);
+
+        Publicacion p = new Publicacion(duenio, categoria, subcategoria, 10000L, 5, "Descripción antigua");
+        p.setId(37L);
+        p.setEstado(EstadoPublicacion.PENDIENTE_REVISION);
+
+        when(publicacionRepository.findById(37L)).thenReturn(Optional.of(p));
+        when(publicacionRepository.save(any(Publicacion.class))).thenAnswer(i -> i.getArgument(0));
+
+        Publicacion resultado = publicacionService.editarPublicacionDuenio(
+                37L, 7L, 25000L, 3, "Descripción actualizada", "producto-pendiente.jpg");
+
+        assertThat(resultado.getPrecio()).isEqualTo(25000L);
+        assertThat(resultado.getStock()).isEqualTo(3);
+        assertThat(resultado.getDescripcion()).isEqualTo("Descripción actualizada");
+        assertThat(resultado.getImagenFilename()).isEqualTo("producto-pendiente.jpg");
+        assertThat(resultado.getEstado()).isEqualTo(EstadoPublicacion.PENDIENTE_REVISION);
+        assertThat(resultado.getUsuario()).isSameAs(duenio);
+        assertThat(resultado.getCategoria()).isSameAs(categoria);
+        assertThat(resultado.getSubcategoria()).isSameAs(subcategoria);
+        verify(publicacionRepository, org.mockito.Mockito.times(2)).save(p);
+    }
+
+    /**
      * Verifica que intentar modificar categoría o subcategoría en publicación APROBADA lance CategoriaPublicacionInmutableException.
      */
     @Test
@@ -605,20 +645,44 @@ class PublicacionServiceTests {
     }
 
     /**
-     * Verifica que intentar editar una publicación en un estado distinto a APROBADA lance EstadoPublicacionNoEditableException.
+     * Verifica que intentar editar una publicación en un estado no autorizado lance
+     * EstadoPublicacionNoEditableException.
      */
     @Test
-    @DisplayName("Debe lanzar EstadoPublicacionNoEditableException si la publicación no está en estado APROBADA")
+     @DisplayName("Debe lanzar EstadoPublicacionNoEditableException si la publicación está en CAMBIOS_SOLICITADOS")
     void editarPublicacion_EstadoNoAprobado_LanzaEstadoPublicacionNoEditableException() {
         Publicacion pPendiente = new Publicacion();
         pPendiente.setId(32L);
-        pPendiente.setEstado(EstadoPublicacion.PENDIENTE_REVISION);
+        pPendiente.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
 
         when(publicacionRepository.findById(32L)).thenReturn(Optional.of(pPendiente));
 
         assertThatThrownBy(() -> publicacionService.editarPublicacion(32L, 10000L, 5, "Desc", null, null, null))
             .isInstanceOf(EstadoPublicacionNoEditableException.class)
-            .hasMessageContaining("Solo se pueden editar publicaciones en estado 'APROBADA'");
+             .hasMessage("Solo se pueden editar publicaciones en estado 'APROBADA' o 'PENDIENTE_REVISION'. Estado actual: CAMBIOS_SOLICITADOS");
+
+        verify(publicacionRepository, never()).save(any(Publicacion.class));
+    }
+
+    /**
+     * Verifica que el flujo destinado al propietario informe los tres estados autorizados al rechazar
+     * una publicación en un estado reservado para corrección o rechazo.
+     */
+    @Test
+    @DisplayName("La excepción de edición del dueño enumera PENDIENTE_REVISION, APROBADA y OCULTA")
+    void editarPublicacionDuenio_EstadoNoEditable_InformaTodosLosEstadosPermitidos() {
+        Usuario duenio = new Usuario("vendedor-mensaje@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        duenio.setId(80L);
+        Publicacion publicacion = new Publicacion();
+        publicacion.setId(80L);
+        publicacion.setUsuario(duenio);
+        publicacion.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
+
+        when(publicacionRepository.findById(80L)).thenReturn(Optional.of(publicacion));
+
+        assertThatThrownBy(() -> publicacionService.editarPublicacionDuenio(80L, 80L, 25000L, 3, "Descripción", "imagen.jpg"))
+            .isInstanceOf(EstadoPublicacionNoEditableException.class)
+            .hasMessage("Solo se pueden editar publicaciones en estado 'PENDIENTE_REVISION', 'APROBADA' u 'OCULTA'. Estado actual: CAMBIOS_SOLICITADOS");
 
         verify(publicacionRepository, never()).save(any(Publicacion.class));
     }
@@ -1307,5 +1371,98 @@ class PublicacionServiceTests {
 
         verify(transaccionRepository, never()).existsByPublicacionId(99L);
         verify(publicacionRepository, never()).delete(any(Publicacion.class));
+    }
+
+    // =========================================================================
+    // PHA15TSK01 - Tests Red phase para imagenFilename en creación
+    // =========================================================================
+
+    /**
+     * Verifica que crearPublicacion acepte y persista el campo opcional imagenFilename
+     * (PHA15TSK01: habilitar campo imagenFilename en creación).
+     * Este test DEBE FALLAR en Red phase porque crearPublicacion no acepta imagenFilename.
+     */
+    @Test
+    @DisplayName("Debe crear publicación con imagenFilename opcional y persistirlo")
+    void crearPublicacion_ConImagenFilename_PersisteImagenFilename() {
+        Usuario usuario = new Usuario("vendedor-imagen@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        usuario.setId(1L);
+        Usuario admin = new Usuario("admin-imagen@example.com", "hash", Rol.ADMIN, 0L, ZonedDateTime.now());
+        admin.setId(2L);
+
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+        lenient().when(usuarioRepository.findByRol(Rol.ADMIN)).thenReturn(Optional.of(admin));
+        when(categoriaRepository.findById(10L)).thenReturn(Optional.of(categoria));
+        when(subcategoriaRepository.findById(100L)).thenReturn(Optional.of(subcategoria));
+
+        Publicacion publicacionGuardada = new Publicacion(
+            usuario, categoria, subcategoria, 150000L, 5, "Laptop Core i7"
+        );
+        publicacionGuardada.setId(500L);
+        publicacionGuardada.setImagenFilename("producto.jpg");
+
+        when(publicacionRepository.save(any(Publicacion.class))).thenReturn(publicacionGuardada);
+
+        // Este test falla en Red phase porque crearPublicacion no tiene parámetro imagenFilename
+        Publicacion resultado = publicacionService.crearPublicacion(
+            1L, 10L, 100L, 150000L, 5, "Laptop Core i7", "producto.jpg"
+        );
+
+        assertThat(resultado.getId()).isEqualTo(500L);
+        assertThat(resultado.getEstado()).isEqualTo(EstadoPublicacion.PENDIENTE_REVISION);
+        assertThat(resultado.getImagenFilename()).isEqualTo("producto.jpg");
+
+        verify(publicacionRepository).save(any(Publicacion.class));
+         verify(notificacionService).crearNotificacionAdmin(eq("PUBLICACION_PENDIENTE_APROBAR"), anyString(), any(Publicacion.class), isNull(), any());
+    }
+
+    /**
+     * Verifica que crearPublicacion funcione correctamente cuando imagenFilename es null
+     * (campo opcional).
+     */
+    @Test
+    @DisplayName("Debe crear publicación sin imagenFilename (null) y persistirlo como null")
+    void crearPublicacion_SinImagenFilename_PersisteNull() {
+        Usuario usuario = new Usuario("vendedor-sinimagen@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now());
+        usuario.setId(1L);
+        Usuario admin = new Usuario("admin-sinimagen@example.com", "hash", Rol.ADMIN, 0L, ZonedDateTime.now());
+        admin.setId(2L);
+
+        Categoria categoria = new Categoria("Electrónica");
+        categoria.setId(10L);
+
+        Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
+        subcategoria.setId(100L);
+
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+        lenient().when(usuarioRepository.findByRol(Rol.ADMIN)).thenReturn(Optional.of(admin));
+        when(categoriaRepository.findById(10L)).thenReturn(Optional.of(categoria));
+        when(subcategoriaRepository.findById(100L)).thenReturn(Optional.of(subcategoria));
+
+        Publicacion publicacionGuardada = new Publicacion(
+            usuario, categoria, subcategoria, 150000L, 5, "Laptop Core i7"
+        );
+        publicacionGuardada.setId(501L);
+        publicacionGuardada.setImagenFilename(null);
+
+        when(publicacionRepository.save(any(Publicacion.class))).thenReturn(publicacionGuardada);
+
+        // Este test falla en Red phase porque crearPublicacion no tiene parámetro imagenFilename
+        Publicacion resultado = publicacionService.crearPublicacion(
+            1L, 10L, 100L, 150000L, 5, "Laptop Core i7", null
+        );
+
+        assertThat(resultado.getId()).isEqualTo(501L);
+        assertThat(resultado.getEstado()).isEqualTo(EstadoPublicacion.PENDIENTE_REVISION);
+        assertThat(resultado.getImagenFilename()).isNull();
+
+        verify(publicacionRepository).save(any(Publicacion.class));
+         verify(notificacionService).crearNotificacionAdmin(eq("PUBLICACION_PENDIENTE_APROBAR"), anyString(), any(Publicacion.class), isNull(), any());
     }
 }

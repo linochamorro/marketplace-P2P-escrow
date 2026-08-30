@@ -119,7 +119,7 @@ class ReservaStockServiceIntegrationTests {
 
         long precio = 250000L;
         Publicacion publicacion = publicacionService.crearPublicacion(
-            vendedor.getId(), categoria.getId(), subcategoria.getId(), precio, 1, "Última unidad para carrera"
+            vendedor.getId(), categoria.getId(), subcategoria.getId(), precio, 1, "Última unidad para carrera", null
         );
         publicacionService.cambiarEstado(publicacion.getId(), EstadoPublicacion.APROBADA, null);
 

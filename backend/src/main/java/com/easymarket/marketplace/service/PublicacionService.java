@@ -48,7 +48,7 @@ import java.time.ZonedDateTime;
  *   <li>Validación de jerarquía padre-hijo (garantiza que la subcategoría pertenezca a la categoría indicada).</li>
  *   <li>Asignación por defecto del estado {@link EstadoPublicacion#PENDIENTE_REVISION}.</li>
  *   <li>Transiciones controladas conforme a la máquina de estados oficial.</li>
- *   <li>Edición de publicaciones aprobadas (modifica precio, stock &ge; 0 y descripción; bloquea categoría/subcategoría).</li>
+     *   <li>Edición de publicaciones aprobadas o pendientes de revisión (modifica precio, stock &ge; 0, descripción e imagen; bloquea categoría/subcategoría).</li>
  * </ul>
  * </p>
  */
@@ -110,6 +110,7 @@ public class PublicacionService {
      * @param precio precio en centavos (entero > 0)
      * @param stock cantidad inicial disponible (entero >= 1)
      * @param descripcion descripción del producto
+     * @param imagenFilename nombre de archivo de imagen opcional (sin prefijo de URL)
      * @return la entidad {@link Publicacion} creada y persistida con estado 'pendiente_revisión'
      * @throws PrecioInvalidoException si precio <= 0
      * @throws StockInvalidoException si stock < 1
@@ -119,7 +120,7 @@ public class PublicacionService {
      * @throws AdministradorNoEncontradoException si falta la única cuenta ADMIN requerida para el aviso
      */
     @Transactional
-    public Publicacion crearPublicacion(Long usuarioId, Long categoriaId, Long subcategoriaId, long precio, int stock, String descripcion) {
+    public Publicacion crearPublicacion(Long usuarioId, Long categoriaId, Long subcategoriaId, long precio, int stock, String descripcion, String imagenFilename) {
         if (precio <= 0) {
             throw new PrecioInvalidoException("El precio debe ser un monto entero positivo mayor a cero");
         }
@@ -142,18 +143,21 @@ public class PublicacionService {
             );
         }
 
-        Publicacion publicacion = publicacionRepository.save(
-            new Publicacion(usuario, categoria, subcategoria, precio, stock, descripcion)
-        );
+        Publicacion publicacion = new Publicacion(usuario, categoria, subcategoria, precio, stock, descripcion);
+        if (imagenFilename != null && !imagenFilename.isBlank()) {
+            publicacion.setImagenFilename(imagenFilename);
+        }
+        Publicacion guardada = publicacionRepository.save(publicacion);
         ZonedDateTime ahora = ZonedDateTime.now();
-        publicacionEventoRepository.save(new PublicacionEvento(publicacion, usuario, ahora));
+        publicacionEventoRepository.save(new PublicacionEvento(guardada, usuario, ahora));
         notificacionService.crearNotificacionAdmin(
                 "PUBLICACION_PENDIENTE_APROBAR",
-                "Nueva publicación pendiente de aprobación: #" + publicacion.getId(),
+                "Nueva publicación pendiente de aprobación: #" + guardada.getId(),
+                guardada,
                 null,
                 ahora
         );
-        return publicacion;
+        return guardada;
     }
 
     /**
@@ -334,12 +338,14 @@ public class PublicacionService {
     }
 
     /**
-     * Edita los campos de una publicación por su vendedor propietario y gestiona la visibilidad por stock (Stories 3 y 10, spec.md).
+     * Edita los campos de una publicación por su vendedor propietario en estado
+     * {@link EstadoPublicacion#PENDIENTE_REVISION}, {@link EstadoPublicacion#APROBADA} u
+     * {@link EstadoPublicacion#OCULTA}, y gestiona la visibilidad por stock (Stories 3 y 10, spec.md).
      *
      * <p>Orquesta la edición de campos permitidos y la actualización atómica de visibilidad:
      * <ul>
      *   <li>Si el DTO contiene actualización de stock, invoca primero {@link #actualizarStock(Long, int)} para aplicar la regla de Story 10 (stock 0 transiciona a {@link EstadoPublicacion#OCULTA}).</li>
-     *   <li>Posteriormente invoca {@link #editarPublicacion(Long, Long, Integer, String, Long, Long, String)} para actualizar precio, descripción e imagen en estado APROBADA (o conservando OCULTA si el stock pasó a 0).</li>
+     *   <li>Posteriormente invoca {@link #editarPublicacion(Long, Long, Integer, String, Long, Long, String)} para actualizar precio, descripción e imagen en estado APROBADA o PENDIENTE_REVISION (o conserva OCULTA cuando corresponde).</li>
      * </ul>
      * Acepta opcionalmente {@code nuevoImagenFilename} para actualizar la imagen del producto (PHA09TSK04).</p>
      *
@@ -351,6 +357,7 @@ public class PublicacionService {
      * @param nuevoImagenFilename nuevo nombre de archivo de imagen opcional (sin prefijo de URL)
      * @return la entidad {@link Publicacion} actualizada
      * @throws com.easymarket.marketplace.exception.NoEsElPropietarioException si el usuarioId no coincide con el dueño
+     * @throws EstadoPublicacionNoEditableException si la publicación no está en estado PENDIENTE_REVISION, APROBADA u OCULTA
      */
     @Transactional
     public Publicacion editarPublicacionDuenio(Long publicacionId,
@@ -364,6 +371,15 @@ public class PublicacionService {
         if (!publicacion.getUsuario().getId().equals(usuarioId)) {
             throw new com.easymarket.marketplace.exception.NoEsElPropietarioException(
                 "El usuario con ID " + usuarioId + " no es el propietario de la publicación " + publicacionId
+            );
+        }
+
+        if (publicacion.getEstado() != EstadoPublicacion.PENDIENTE_REVISION
+                && publicacion.getEstado() != EstadoPublicacion.APROBADA
+                && publicacion.getEstado() != EstadoPublicacion.OCULTA) {
+            throw new EstadoPublicacionNoEditableException(
+                 "Solo se pueden editar publicaciones en estado 'PENDIENTE_REVISION', 'APROBADA' u 'OCULTA'. Estado actual: "
+                    + publicacion.getEstado()
             );
         }
 
@@ -393,7 +409,7 @@ public class PublicacionService {
     }
 
     /**
-     * Edita los campos permitidos (precio, stock, descripción e imagen) de una publicación aprobada.
+     * Edita los campos permitidos (precio, stock, descripción e imagen) de una publicación aprobada o pendiente de revisión.
      *
      * <p>Conserva sin cambios los campos recibidos como {@code null}, rechaza modificaciones de
      * categoría o subcategoría y no modifica el estado de la publicación.
@@ -408,7 +424,7 @@ public class PublicacionService {
      * @param nuevoImagenFilename nuevo nombre de archivo de imagen opcional (sin prefijo de URL)
      * @return la publicación actualizada y persistida
      * @throws PublicacionNoEncontradaException si no existe la publicación indicada
-     * @throws EstadoPublicacionNoEditableException si la publicación no está en estado {@link EstadoPublicacion#APROBADA}
+      * @throws EstadoPublicacionNoEditableException si la publicación no está en estado {@link EstadoPublicacion#APROBADA} ni {@link EstadoPublicacion#PENDIENTE_REVISION}
      * @throws CategoriaPublicacionInmutableException si la categoría o subcategoría recibida difiere de la actual
      * @throws PrecioInvalidoException si {@code nuevoPrecio} es cero o negativo
      * @throws StockInvalidoException si {@code nuevoStock} es negativo
@@ -423,9 +439,10 @@ public class PublicacionService {
                                          String nuevoImagenFilename) {
         Publicacion publicacion = obtenerPublicacionPorId(publicacionId);
 
-        if (publicacion.getEstado() != EstadoPublicacion.APROBADA) {
+        if (publicacion.getEstado() != EstadoPublicacion.APROBADA
+                && publicacion.getEstado() != EstadoPublicacion.PENDIENTE_REVISION) {
             throw new EstadoPublicacionNoEditableException(
-                "Solo se pueden editar publicaciones en estado 'APROBADA'. Estado actual: " + publicacion.getEstado()
+                "Solo se pueden editar publicaciones en estado 'APROBADA' o 'PENDIENTE_REVISION'. Estado actual: " + publicacion.getEstado()
             );
         }
 
@@ -537,6 +554,7 @@ public class PublicacionService {
         notificacionService.crearNotificacionAdmin(
                 "PUBLICACION_PENDIENTE_APROBAR",
                 "Publicación #" + guardada.getId() + " corregida y reenviada a revisión",
+                guardada,
                 null,
                 ahora
         );

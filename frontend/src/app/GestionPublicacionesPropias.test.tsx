@@ -83,9 +83,9 @@ describe('GestionPublicacionesPropias (PHA06TSK10 + PHA09TSK04)', () => {
     const lista = await screen.findByRole('list', { name: 'Publicaciones propias' });
     const items = within(lista).getAllByRole('listitem');
 
-    // PENDIENTE_REVISION: solo Eliminar (nueva mejora PHA09TSK04)
+    // PENDIENTE_REVISION: Editar + Eliminar (PHA15TSK01: ahora permite editar pendientes)
+    expect(within(items[0]).getByRole('button', { name: /editar publicación 1/i })).toBeInTheDocument();
     expect(within(items[0]).getByRole('button', { name: /eliminar publicación 1/i })).toBeInTheDocument();
-    expect(within(items[0]).queryByRole('button', { name: /editar/i })).not.toBeInTheDocument();
     expect(within(items[0]).queryByRole('button', { name: /corregir/i })).not.toBeInTheDocument();
     // APROBADA: Editar + Eliminar
     expect(within(items[1]).getByRole('button', { name: /editar publicación 2/i })).toBeInTheDocument();
@@ -307,5 +307,25 @@ describe('GestionPublicacionesPropias (PHA06TSK10 + PHA09TSK04)', () => {
       method: 'PATCH', credentials: 'include',
       body: JSON.stringify({ precio: 1509, stock: 2, descripcion: 'Oferta 2', imagenFilename: 'imagen-nueva.jpg' })
     })));
+  });
+
+  // =========================================================================
+  // PHA15TSK01 - Tests Red phase para edición de PENDIENTE_REVISION
+  // =========================================================================
+
+  it('muestra botón Editar para publicaciones en PENDIENTE_REVISION (PHA15TSK01)', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(respuesta(CATEGORIAS))
+      .mockResolvedValueOnce(respuesta([
+        publicacion(1, 'PENDIENTE_REVISION', 7, 71, 'producto-pendiente.jpg')
+      ]));
+    render(<GestionPublicacionesPropias />);
+    const lista = await screen.findByRole('list', { name: 'Publicaciones propias' });
+    const items = within(lista).getAllByRole('listitem');
+
+    // PENDIENTE_REVISION: debe mostrar botón Editar (nuevo comportamiento PHA15TSK01)
+    expect(within(items[0]).getByRole('button', { name: /editar publicación 1/i })).toBeInTheDocument();
+    expect(within(items[0]).getByRole('button', { name: /eliminar publicación 1/i })).toBeInTheDocument();
+    expect(within(items[0]).queryByRole('button', { name: /corregir/i })).not.toBeInTheDocument();
   });
 });

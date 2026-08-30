@@ -42,6 +42,7 @@ export default function PublicacionForm({
   const [categoriaId, setCategoriaId] = useState('');
   const [subcategoriaId, setSubcategoriaId] = useState('');
   const [descripcion, setDescripcion] = useState('');
+  const [imagenFilename, setImagenFilename] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
   const [cargandoCategorias, setCargandoCategorias] = useState(true);
   const [catalogoRespondio, setCatalogoRespondio] = useState(false);
@@ -125,7 +126,8 @@ export default function PublicacionForm({
           stock: Number(stockInput),
           categoriaId: Number(categoriaId),
           subcategoriaId: Number(subcategoriaId),
-          descripcion
+          descripcion,
+          imagenFilename: imagenFilename
         })
       });
       if (!response.ok) {
@@ -168,6 +170,15 @@ export default function PublicacionForm({
       </label>
       <label className="block text-sm text-slate-700">Descripción
         <textarea aria-label="Descripción" rows={4} value={descripcion} onChange={(event) => setDescripcion(event.target.value)} className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-[#0F172A]" />
+      </label>
+      <label className="block text-sm text-slate-700">Imagen (archivo)
+        <input
+          aria-label="Imagen (archivo)"
+          placeholder="producto.jpg"
+          value={imagenFilename}
+          onChange={(event) => setImagenFilename(event.target.value)}
+          className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-[#0F172A]"
+        />
       </label>
       <button type="submit" disabled={cargandoCategorias || !catalogoRespondio || isSubmitting} className="w-full rounded border border-slate-900 bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{isSubmitting ? 'Publicando...' : 'Publicar'}</button>
     </form>

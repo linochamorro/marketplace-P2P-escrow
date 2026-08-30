@@ -88,7 +88,7 @@ class PublicacionCreacionAuditoriaTests {
         lenient().when(notificacionService.crearNotificacionAdmin(anyString(), anyString(), any(), any()))
                 .thenReturn(mock(Notificacion.class));
 
-        Publicacion resultado = publicacionService.crearPublicacion(10L, 30L, 40L, 150000L, 2, "Portátil");
+        Publicacion resultado = publicacionService.crearPublicacion(10L, 30L, 40L, 150000L, 2, "Portátil", null);
 
         ArgumentCaptor<PublicacionEvento> evento = ArgumentCaptor.forClass(PublicacionEvento.class);
         assertThat(resultado).isSameAs(persistida);
@@ -97,6 +97,7 @@ class PublicacionCreacionAuditoriaTests {
         verify(notificacionService).crearNotificacionAdmin(
                 eq("PUBLICACION_PENDIENTE_APROBAR"),
                 eq("Nueva publicación pendiente de aprobación: #50"),
+                any(Publicacion.class),
                 isNull(),
                 any()
         );

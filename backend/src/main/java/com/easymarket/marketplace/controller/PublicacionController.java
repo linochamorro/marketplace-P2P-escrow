@@ -59,7 +59,7 @@ public class PublicacionController {
     /**
      * Endpoint REST {@code POST /publicaciones} para la creación de una nueva publicación por el usuario autenticado.
      *
-     * @param requestDto DTO con los detalles del producto en venta (precio, stock, categorías, descripción)
+     * @param requestDto DTO con los detalles del producto en venta (precio, stock, categorías, descripción, imagenFilename opcional)
      * @param principal identidad del vendedor autenticado mediante JWT
      * @return {@link ResponseEntity} con código HTTP 201 Created y DTO de la publicación creada
      */
@@ -74,7 +74,8 @@ public class PublicacionController {
                 requestDto.subcategoriaId(),
                 requestDto.precio(),
                 requestDto.stock(),
-                requestDto.descripcion()
+                requestDto.descripcion(),
+                requestDto.imagenFilename()
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(PublicacionResponseDto.fromEntity(creada));
     }

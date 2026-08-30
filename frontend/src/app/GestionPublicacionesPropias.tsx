@@ -236,7 +236,7 @@ export default function GestionPublicacionesPropias({
             : <ul aria-label="Publicaciones propias" className="grid grid-cols-1 gap-4">{publicaciones.map((publicacion) => {
               const clasificacion = resolverClasificacion(publicacion, categorias);
               const estado = publicacion.estado as EstadoGestionable;
-              const puedeEditar = Boolean(clasificacion) && (estado === 'APROBADA' || estado === 'OCULTA');
+              const puedeEditar = Boolean(clasificacion) && (estado === 'PENDIENTE_REVISION' || estado === 'APROBADA' || estado === 'OCULTA');
               const puedeCorregir = Boolean(clasificacion) && (estado === 'CAMBIOS_SOLICITADOS' || estado === 'RECHAZADA');
               const imagenFilename = publicacion.imagenFilename;
               return <li key={publicacion.id} className="rounded-lg border border-slate-200 bg-white p-6">

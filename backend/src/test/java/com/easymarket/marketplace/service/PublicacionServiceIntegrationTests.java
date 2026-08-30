@@ -76,7 +76,7 @@ class PublicacionServiceIntegrationTests {
         Subcategoria subcat = subcategoriaRepository.save(new Subcategoria(cat, "Smartphones"));
 
         Publicacion creada = publicacionService.crearPublicacion(
-            usuario.getId(), cat.getId(), subcat.getId(), 299900L, 10, "Smartphone 5G 128GB"
+            usuario.getId(), cat.getId(), subcat.getId(), 299900L, 10, "Smartphone 5G 128GB", null
         );
 
         assertThat(creada.getId()).isNotNull();

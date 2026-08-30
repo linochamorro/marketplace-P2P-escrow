@@ -134,7 +134,8 @@ class PublicacionServiceAtomicidadIntegrationTests {
         DatosCreacion datos = prepararDatos("falla-notificacion");
         Conteos conteosAntes = contarEfectos();
         doThrow(new DataIntegrityViolationException("fallo notificación"))
-            .when(notificacionRepository).save(any(com.easymarket.marketplace.model.Notificacion.class));
+            .when(notificacionRepository).upsertPublicacion(any(Long.class), any(Long.class), any(String.class),
+                any(String.class), any(java.time.ZonedDateTime.class));
 
         assertThatThrownBy(() -> crear(datos))
             .isInstanceOf(DataIntegrityViolationException.class)
@@ -151,7 +152,7 @@ class PublicacionServiceAtomicidadIntegrationTests {
      */
     private Publicacion crear(DatosCreacion datos) {
         return publicacionService.crearPublicacion(datos.vendedorId(), datos.categoriaId(), datos.subcategoriaId(),
-            150000L, 5, "Publicación atómica " + datos.sufijo());
+            150000L, 5, "Publicación atómica " + datos.sufijo(), null);
     }
 
     /**
