@@ -2,6 +2,9 @@ package com.easymarket.marketplace.repository;
 
 import com.easymarket.marketplace.model.Notificacion;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -12,6 +15,51 @@ import java.util.Optional;
  */
 @Repository
 public interface NotificacionRepository extends JpaRepository<Notificacion, Long> {
+
+    /**
+     * Atomically inserts or reactivates the unique publication notification slot. The conflict
+     * target mirrors the V20 partial unique index and is deliberately separate from the transaction
+     * slot so daily transaction history can never enter this route.
+     *
+     * @param usuarioId recipient identifier
+     * @param publicacionId pending publication identifier
+     * @param tipo stable normal notification type
+     * @param mensaje literal notification message
+     * @param createdAt creation/reactivation timestamp
+     * @return number of affected rows, always one for a successful upsert
+     */
+    @Modifying
+    @Query(value = "INSERT INTO notificaciones (usuario_id, publicacion_id, mensaje, tipo, leida, created_at) "
+            + "VALUES (:usuarioId, :publicacionId, :mensaje, :tipo, false, :createdAt) "
+            + "ON CONFLICT (usuario_id, publicacion_id, tipo) WHERE publicacion_id IS NOT NULL "
+            + "DO UPDATE SET mensaje = EXCLUDED.mensaje, leida = false, created_at = EXCLUDED.created_at",
+            nativeQuery = true)
+    int upsertPublicacion(@Param("usuarioId") Long usuarioId, @Param("publicacionId") Long publicacionId,
+                          @Param("tipo") String tipo, @Param("mensaje") String mensaje,
+                          @Param("createdAt") java.time.ZonedDateTime createdAt);
+
+    /**
+     * Atomically inserts or reactivates the unique normal transaction notification slot. The
+     * predicate excludes the two daily historical types, preserving their separate service route.
+     *
+     * @param usuarioId recipient identifier
+     * @param transaccionId transaction identifier
+     * @param tipo stable normal notification type
+     * @param mensaje literal notification message
+     * @param createdAt creation/reactivation timestamp
+     * @return number of affected rows, always one for a successful upsert
+     */
+    @Modifying
+    @Query(value = "INSERT INTO notificaciones (usuario_id, transaccion_id, mensaje, tipo, leida, created_at) "
+            + "VALUES (:usuarioId, :transaccionId, :mensaje, :tipo, false, :createdAt) "
+            + "ON CONFLICT (usuario_id, transaccion_id, tipo) "
+            + "WHERE transaccion_id IS NOT NULL "
+            + "AND tipo NOT IN ('COMPRA_PENDIENTE_DIARIA', 'VENTA_POR_ENTREGAR_DIARIA') "
+            + "DO UPDATE SET mensaje = EXCLUDED.mensaje, leida = false, created_at = EXCLUDED.created_at",
+            nativeQuery = true)
+    int upsertTransaccion(@Param("usuarioId") Long usuarioId, @Param("transaccionId") Long transaccionId,
+                          @Param("tipo") String tipo, @Param("mensaje") String mensaje,
+                          @Param("createdAt") java.time.ZonedDateTime createdAt);
 
     /**
      * Finds the latest notification of one type for one recipient and transaction.
@@ -27,6 +75,28 @@ public interface NotificacionRepository extends JpaRepository<Notificacion, Long
      */
     Optional<Notificacion> findFirstByTransaccion_IdAndUsuario_IdAndTipoOrderByCreatedAtDesc(
         Long transaccionId, Long usuarioId, String tipo);
+
+    /**
+     * Finds the unique notification slot for a recipient, publication and type.
+     *
+     * @param usuarioId recipient identifier
+     * @param publicacionId pending publication identifier
+     * @param tipo stable notification type
+     * @return existing slot, or empty when it has not been emitted
+     */
+    Optional<Notificacion> findByUsuario_IdAndPublicacion_IdAndTipo(Long usuarioId, Long publicacionId,
+                                                                       String tipo);
+
+    /**
+     * Finds the unique notification slot for a recipient, transaction and type.
+     *
+     * @param usuarioId recipient identifier
+     * @param transaccionId transaction identifier
+     * @param tipo stable notification type
+     * @return existing slot, or empty when it has not been emitted
+     */
+    Optional<Notificacion> findByUsuario_IdAndTransaccion_IdAndTipo(Long usuarioId, Long transaccionId,
+                                                                       String tipo);
 
     /**
      * Finds all in-app notifications addressed to one recipient, newest first.

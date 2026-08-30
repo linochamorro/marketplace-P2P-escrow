@@ -142,7 +142,7 @@ class AutoConfirmarRecepcionJobIntegrationTests {
         Categoria categoria = categoriaRepository.save(new Categoria("Categoría auto " + sufijo));
         Subcategoria subcategoria = subcategoriaRepository.save(new Subcategoria(categoria, "Subcategoría auto " + sufijo));
         Publicacion publicacion = publicacionService.crearPublicacion(
-            vendedor.getId(), categoria.getId(), subcategoria.getId(), precioSnapshot, 1, "Publicación para auto-confirmación");
+            vendedor.getId(), categoria.getId(), subcategoria.getId(), precioSnapshot, 1, "Publicación para auto-confirmación", null);
         publicacionService.cambiarEstado(publicacion.getId(), EstadoPublicacion.APROBADA, null);
 
         Transaccion transaccion = new Transaccion(comprador, publicacion, precioSnapshot, ZonedDateTime.now().minusDays(3));

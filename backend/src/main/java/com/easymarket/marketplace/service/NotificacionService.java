@@ -4,6 +4,7 @@ import com.easymarket.marketplace.exception.AdministradorNoEncontradoException;
 import com.easymarket.marketplace.exception.NotificacionNoEncontradaException;
 import com.easymarket.marketplace.exception.UsuarioNoAutorizadoException;
 import com.easymarket.marketplace.model.Notificacion;
+import com.easymarket.marketplace.model.Publicacion;
 import com.easymarket.marketplace.model.Rol;
 import com.easymarket.marketplace.model.Transaccion;
 import com.easymarket.marketplace.model.Usuario;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Servicio de dominio para la gestión de notificaciones in-app accionables por rol (PHA09TSK05).
@@ -34,6 +36,10 @@ import java.util.List;
  */
 @Service
 public class NotificacionService {
+
+    /** Daily notification types that intentionally retain one row per eligible interval. */
+    private static final Set<String> TIPOS_PERIODICOS = Set.of(
+            "COMPRA_PENDIENTE_DIARIA", "VENTA_POR_ENTREGAR_DIARIA");
 
     private final NotificacionRepository notificacionRepository;
     private final UsuarioRepository usuarioRepository;
@@ -67,12 +73,30 @@ public class NotificacionService {
      */
     @Transactional
     public Notificacion crearNotificacionAdmin(String tipo, String mensaje, Transaccion transaccion,
-                                                ZonedDateTime ahora) {
+                                                 ZonedDateTime ahora) {
         Usuario admin = usuarioRepository.findByRol(Rol.ADMIN)
                 .orElseThrow(() -> new AdministradorNoEncontradoException(
                         "No existe la cuenta ADMIN única requerida para notificar acción administrativa"));
-        Notificacion notificacion = new Notificacion(admin, transaccion, mensaje, tipo, ahora);
-        return notificacionRepository.save(notificacion);
+        return guardarReutilizando(admin, mensaje, tipo, null, transaccion, ahora);
+    }
+
+    /**
+     * Creates or reactivates the ADMIN slot associated with a pending publication.
+     *
+     * @param tipo stable notification type
+     * @param mensaje literal content
+     * @param publicacion pending publication
+     * @param transaccion optional transaction association
+     * @param ahora timestamp for creation or reactivation
+     * @return inserted or reactivated notification
+     */
+    @Transactional
+    public Notificacion crearNotificacionAdmin(String tipo, String mensaje, Publicacion publicacion,
+                                                Transaccion transaccion, ZonedDateTime ahora) {
+        Usuario admin = usuarioRepository.findByRol(Rol.ADMIN)
+                .orElseThrow(() -> new AdministradorNoEncontradoException(
+                        "No existe la cuenta ADMIN única requerida para notificar acción administrativa"));
+        return guardarReutilizando(admin, mensaje, tipo, publicacion, transaccion, ahora);
     }
 
     /**
@@ -91,9 +115,125 @@ public class NotificacionService {
      */
     @Transactional
     public Notificacion crearNotificacionUsuario(Usuario destinatario, String tipo, String mensaje,
-                                                  Transaccion transaccion, ZonedDateTime ahora) {
-        Notificacion notificacion = new Notificacion(destinatario, transaccion, mensaje, tipo, ahora);
-        return notificacionRepository.save(notificacion);
+                                                   Transaccion transaccion, ZonedDateTime ahora) {
+        return guardarReutilizando(destinatario, mensaje, tipo, null, transaccion, ahora);
+    }
+
+    /**
+     * Inserts a recurrent daily transaction notification without consulting the idempotent slot.
+     *
+     * <p>This explicit route is reserved for the two daily reminder types. Their rows form
+     * notification history and therefore must not be reused by the normal pending-element route.
+     * The database partial unique index in V20 excludes exactly these types.</p>
+     *
+     * @param destinatario recipient of the daily reminder
+     * @param tipo daily reminder type
+     * @param mensaje literal reminder content
+     * @param transaccion open transaction associated with the reminder
+     * @param ahora creation timestamp
+     * @return newly inserted daily notification
+     * @throws IllegalArgumentException when {@code tipo} is not a supported daily type
+     */
+    @Transactional
+    public Notificacion crearNotificacionDiaria(Usuario destinatario, String tipo, String mensaje,
+                                                 Transaccion transaccion, ZonedDateTime ahora) {
+        if (!TIPOS_PERIODICOS.contains(tipo)) {
+            throw new IllegalArgumentException("Tipo no periódico para la ruta diaria: " + tipo);
+        }
+        return notificacionRepository.save(new Notificacion(
+                destinatario, transaccion, mensaje, tipo, ahora));
+    }
+
+    /**
+     * Reads the latest historical row for a supported daily reminder.
+     *
+     * @param transaccionId transaction identifier
+     * @param usuarioId recipient identifier
+     * @param tipo supported daily reminder type
+     * @return latest matching row, or empty when no reminder exists
+     * @throws IllegalArgumentException when {@code tipo} is not a supported daily type
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<Notificacion> ultimoAvisoDiario(Long transaccionId, Long usuarioId,
+                                                               String tipo) {
+        if (!TIPOS_PERIODICOS.contains(tipo)) {
+            throw new IllegalArgumentException("Tipo no periódico para la ruta diaria: " + tipo);
+        }
+        return notificacionRepository.findFirstByTransaccion_IdAndUsuario_IdAndTipoOrderByCreatedAtDesc(
+                transaccionId, usuarioId, tipo);
+    }
+
+    /**
+     * Creates or reactivates the unique user slot for a pending element.
+     *
+     * @param destinatario recipient user
+     * @param tipo stable notification type
+     * @param mensaje literal content
+     * @param publicacion optional pending publication
+     * @param transaccion optional transaction association
+     * @param ahora timestamp for creation or reactivation
+     * @return inserted or reactivated notification
+     */
+    @Transactional
+    public Notificacion crearNotificacionUsuario(Usuario destinatario, String tipo, String mensaje,
+                                                  Publicacion publicacion, Transaccion transaccion,
+                                                  ZonedDateTime ahora) {
+        return guardarReutilizando(destinatario, mensaje, tipo, publicacion, transaccion, ahora);
+    }
+
+    /**
+     * Reuses the database slot identified by the non-null business association, or inserts it.
+     * A notification is active while its caller's business element remains pending; {@code leida}
+     * is only a presentation flag, so reactivation clears it without creating an audit event.
+     *
+     * @param destinatario recipient user
+     * @param mensaje literal content
+     * @param tipo stable type
+     * @param publicacion optional publication key
+     * @param transaccion optional transaction key
+     * @param ahora creation/reactivation time
+     * @return persisted notification
+     */
+    private Notificacion guardarReutilizando(Usuario destinatario, String mensaje, String tipo,
+                                              Publicacion publicacion, Transaccion transaccion,
+                                              ZonedDateTime ahora) {
+        if (TIPOS_PERIODICOS.contains(tipo)) {
+            throw new IllegalArgumentException("Los avisos diarios requieren la ruta histórica explícita");
+        }
+        if (transaccion != null) {
+            notificacionRepository.upsertTransaccion(destinatario.getId(), transaccion.getId(), tipo, mensaje, ahora);
+            Notificacion notificacion = notificacionRepository.findByUsuario_IdAndTransaccion_IdAndTipo(
+                    destinatario.getId(), transaccion.getId(), tipo).orElseThrow();
+            return reactivar(notificacion, publicacion, mensaje, ahora);
+        }
+        if (publicacion != null) {
+            notificacionRepository.upsertPublicacion(destinatario.getId(), publicacion.getId(), tipo, mensaje, ahora);
+            Notificacion notificacion = notificacionRepository.findByUsuario_IdAndPublicacion_IdAndTipo(
+                    destinatario.getId(), publicacion.getId(), tipo).orElseThrow();
+            return reactivar(notificacion, publicacion, mensaje, ahora);
+        }
+        return notificacionRepository.save(new Notificacion(
+                destinatario, publicacion, transaccion, mensaje, tipo, ahora));
+    }
+
+    /**
+     * Synchronizes the entity returned after an atomic upsert with the values of the winning slot.
+     *
+     * @param notificacion row returned by the repository
+     * @param publicacion optional publication association
+     * @param mensaje current literal message
+     * @param ahora current creation/reactivation timestamp
+     * @return the reactivated notification entity
+     */
+    private Notificacion reactivar(Notificacion notificacion, Publicacion publicacion,
+                                   String mensaje, ZonedDateTime ahora) {
+        if (publicacion != null) {
+            notificacion.setPublicacion(publicacion);
+        }
+        notificacion.setLeida(false);
+        notificacion.setMensaje(mensaje);
+        notificacion.setCreatedAt(ahora);
+        return notificacion;
     }
 
     /**

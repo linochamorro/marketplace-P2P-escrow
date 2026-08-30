@@ -4,7 +4,6 @@ import com.easymarket.marketplace.model.Notificacion;
 import com.easymarket.marketplace.model.EstadoTransaccion;
 import com.easymarket.marketplace.model.Transaccion;
 import com.easymarket.marketplace.model.Usuario;
-import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.TransaccionEventoRepository;
 import com.easymarket.marketplace.repository.TransaccionRepository;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -48,8 +47,8 @@ public class NotificacionDiariaTransaccionAbiertaJob {
     /** Repository selecting open transactions under PostgreSQL row locks. */
     private final TransaccionRepository transaccionRepository;
 
-    /** Repository reading and persisting transaction-associated notification projections. */
-    private final NotificacionRepository notificacionRepository;
+    /** Service exposing the explicit historical route for daily notifications. */
+    private final NotificacionService notificacionService;
 
     /** Repository reading the append-only entry timestamp of disputed transactions. */
     private final TransaccionEventoRepository transaccionEventoRepository;
@@ -58,14 +57,14 @@ public class NotificacionDiariaTransaccionAbiertaJob {
      * Creates the scheduled daily open-transaction notification job.
      *
      * @param transaccionRepository repository that locks open transactions
-     * @param notificacionRepository repository that finds and persists daily notices
+     * @param notificacionService service that persists daily notice history
      * @param transaccionEventoRepository repository that resolves the entry event for disputes
      */
     public NotificacionDiariaTransaccionAbiertaJob(TransaccionRepository transaccionRepository,
-                                                    NotificacionRepository notificacionRepository,
-                                                    TransaccionEventoRepository transaccionEventoRepository) {
+                                                     NotificacionService notificacionService,
+                                                     TransaccionEventoRepository transaccionEventoRepository) {
         this.transaccionRepository = transaccionRepository;
-        this.notificacionRepository = notificacionRepository;
+        this.notificacionService = notificacionService;
         this.transaccionEventoRepository = transaccionEventoRepository;
     }
 
@@ -112,15 +111,13 @@ public class NotificacionDiariaTransaccionAbiertaJob {
     private void notificarSiCorresponde(Transaccion transaccion, Usuario destinatario, String tipo,
                                         String mensaje, ZonedDateTime ahora) {
         ZonedDateTime limiteExclusivo = ahora.minusHours(INTERVALO_HORAS);
-        boolean avisoVencido = notificacionRepository
-            .findFirstByTransaccion_IdAndUsuario_IdAndTipoOrderByCreatedAtDesc(
-                transaccion.getId(), destinatario.getId(), tipo)
+        boolean avisoVencido = notificacionService.ultimoAvisoDiario(transaccion.getId(), destinatario.getId(), tipo)
             .map(ultimoAviso -> ultimoAviso.getCreatedAt().isBefore(limiteExclusivo))
             .orElseGet(() -> fechaEntradaEstadoAbierto(transaccion)
                 .map(fechaEntrada -> fechaEntrada.isBefore(limiteExclusivo))
                 .orElse(false));
         if (avisoVencido) {
-            notificacionRepository.save(new Notificacion(destinatario, transaccion, mensaje, tipo, ahora));
+            notificacionService.crearNotificacionDiaria(destinatario, tipo, mensaje, transaccion, ahora);
         }
     }
 
