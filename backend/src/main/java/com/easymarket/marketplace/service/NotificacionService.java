@@ -33,6 +33,10 @@ import java.util.Set;
  * negocio que la origina (moderación, disputa, compra, envío, entrega), garantizando atomicidad
  * (constitución, principio 1). No se emiten notificaciones desde jobs preexistentes — solo
  * desde los servicios de dominio que ejecutan las transiciones de estado.</p>
+ *
+ * <p>Las consultas de lectura ({@code listarPorUsuarioYRol} y, desde PHA15TSK05,
+ * {@code contarNoLeidasPorUsuarioYRol}) comparten la misma definición de tipos accionables por
+ * rol, de modo que el listado y el contador de no leídas jamás divergen en criterio.</p>
  */
 @Service
 public class NotificacionService {
@@ -40,6 +44,30 @@ public class NotificacionService {
     /** Daily notification types that intentionally retain one row per eligible interval. */
     private static final Set<String> TIPOS_PERIODICOS = Set.of(
             "COMPRA_PENDIENTE_DIARIA", "VENTA_POR_ENTREGAR_DIARIA");
+
+    /**
+     * Tipos accionables del rol ADMIN (moderación y disputas). Fuente única del criterio por rol:
+     * la usan el listado {@code listarPorUsuarioYRol} y el contador
+     * {@code contarNoLeidasPorUsuarioYRol} (PHA15TSK05) para que el badge y el listado jamás
+     * diverjan. Los avisos diarios/periódicos NO pertenecen a este set (plan.md §Notificaciones,
+     * fila "Unicidad por elemento pendiente": conservan historial propio).
+     */
+    private static final List<String> TIPOS_ACCIONABLES_ADMIN = List.of(
+            "PUBLICACION_PENDIENTE_APROBAR", "DISPUTA_PENDIENTE_RESOLVER");
+
+    /**
+     * Tipos accionables del rol USUARIO (compra/venta/envío/disputa). Misma fuente única y misma
+     * exclusión de diarios que {@link #TIPOS_ACCIONABLES_ADMIN}.
+     */
+    private static final List<String> TIPOS_ACCIONABLES_USUARIO = List.of(
+            "RESPUESTA_USUARIO_PENDIENTE",
+            "PUBLICACION_APROBADA_RECHAZADA",
+            "COMPRA_CONFIRMADA",
+            "ENVIO_MARCADO",
+            "ENTREGA_MARCADA",
+            "DISPUTA_ABIERTA",
+            "DISPUTA_RESUELTA"
+    );
 
     private final NotificacionRepository notificacionRepository;
     private final UsuarioRepository usuarioRepository;
@@ -277,24 +305,48 @@ public class NotificacionService {
      */
     @Transactional(readOnly = true)
     public List<Notificacion> listarPorUsuarioYRol(Long usuarioId, Rol rol) {
+        return notificacionRepository.findByUsuarioIdAndTipoInOrderByCreatedAtDescIdDesc(
+                usuarioId, tiposAccionablesPorRol(rol));
+    }
+
+    /**
+     * Cuenta las notificaciones accionables NO leídas del usuario autenticado según su rol
+     * (PHA15TSK05, plan.md §Notificaciones fila "Contador de pendientes").
+     *
+     * <p>El conteo usa EXACTAMENTE el mismo criterio por rol que {@link #listarPorUsuarioYRol}
+     * (misma lista de tipos por rol, resuelta por {@link #tiposAccionablesPorRol(Rol)}) filtrado
+     * por {@code leida=false}, de modo que el badge y el listado jamás divergen. La identidad
+     * proviene exclusivamente del JWT — el método no recibe ni considera dato alguno enviado por
+     * el cliente (constitution, principio 7). Los avisos diarios y periódicos
+     * ({@code COMPRA_PENDIENTE_DIARIA}, {@code VENTA_POR_ENTREGAR_DIARIA},
+     * {@code ENVIO_PENDIENTE_48H}) quedan excluidos por no pertenecer al set accionable de
+     * ningún rol. Consulta de agregación de solo lectura en un único acceso a base de datos,
+     * sin hidratación de entidades.</p>
+     *
+     * @param usuarioId ID del usuario autenticado (desde JWT)
+     * @param rol rol del usuario autenticado ({@link Rol#ADMIN} o {@link Rol#USUARIO}, desde JWT)
+     * @return cantidad de notificaciones accionables no leídas del usuario; {@code 0} cuando no
+     *         tiene ninguna
+     */
+    @Transactional(readOnly = true)
+    public long contarNoLeidasPorUsuarioYRol(Long usuarioId, Rol rol) {
+        return notificacionRepository.countByUsuarioIdAndTipoInAndLeidaFalse(
+                usuarioId, tiposAccionablesPorRol(rol));
+    }
+
+    /**
+     * Resuelve la lista de tipos accionables de un rol. Única definición del criterio por rol:
+     * compartida por el listado y el contador para que ambos usen el MISMO set (decisión de
+     * implementación PHA15TSK05 declarada en su Artifact).
+     *
+     * @param rol rol del usuario autenticado
+     * @return lista inmutable de tipos accionables para el rol
+     */
+    private static List<String> tiposAccionablesPorRol(Rol rol) {
         if (rol == Rol.ADMIN) {
-            return notificacionRepository.findByUsuarioIdAndTipoInOrderByCreatedAtDescIdDesc(
-                    usuarioId,
-                    List.of("PUBLICACION_PENDIENTE_APROBAR", "DISPUTA_PENDIENTE_RESOLVER")
-            );
+            return TIPOS_ACCIONABLES_ADMIN;
         }
         // USUARIO: compra/venta/envío/disputa
-        return notificacionRepository.findByUsuarioIdAndTipoInOrderByCreatedAtDescIdDesc(
-                usuarioId,
-                List.of(
-                        "RESPUESTA_USUARIO_PENDIENTE",
-                        "PUBLICACION_APROBADA_RECHAZADA",
-                        "COMPRA_CONFIRMADA",
-                        "ENVIO_MARCADO",
-                        "ENTREGA_MARCADA",
-                        "DISPUTA_ABIERTA",
-                        "DISPUTA_RESUELTA"
-                )
-        );
+        return TIPOS_ACCIONABLES_USUARIO;
     }
 }

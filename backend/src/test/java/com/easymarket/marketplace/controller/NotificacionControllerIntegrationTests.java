@@ -69,6 +69,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   <li>{@code PATCH /notificaciones/{id}/leer} marca {@code leida=true} de forma idempotente
  *       (segunda llamada retorna la misma entidad), 404 si la notificación no existe, 403 si el
  *       autenticado no es su destinatario.</li>
+ *   <li>{@code GET /notificaciones/no-leidas/count} (PHA15TSK05) devuelve {@code {"cantidad": N}}
+ *       contando EXCLUSIVAMENTE las notificaciones accionables del rol del JWT con
+ *       {@code leida=false}: el mismo criterio por rol de {@code listarPorUsuarioYRol} (ADMIN:
+ *       moderación/disputas; USER: compra/venta/envío/disputa). Los avisos diarios y periódicos
+ *       ({@code COMPRA_PENDIENTE_DIARIA}, {@code VENTA_POR_ENTREGAR_DIARIA},
+ *       {@code ENVIO_PENDIENTE_48H}) quedan fuera del set accionable (plan.md §Notificaciones,
+ *       fila "Unicidad por elemento pendiente": conservan historial propio, no son slots de
+ *       elemento pendiente). No acepta ni lee parámetro alguno del cliente: usuario y rol salen
+ *       del JWT (constitution, principio 7). Marcar una notificación como leída con el PATCH
+ *       existente actualiza el conteo.</li>
  * </ul>
  *
  * <p>Los tipos sembrados son todos válidos frente al CHECK {@code chk_notificaciones_tipo_valido}
@@ -482,6 +492,178 @@ class NotificacionControllerIntegrationTests {
 
         mockMvc.perform(patch("/notificaciones/" + notificacion.getId() + "/leer"))
                 .andExpect(status().isForbidden());
+    }
+
+    // ------------------------------------------------------------------
+    // PHA15TSK05 — GET /notificaciones/no-leidas/count
+    // ------------------------------------------------------------------
+
+    /**
+     * Verifica el criterio central del contador de pendientes (PHA15TSK05): {@code GET
+     * /notificaciones/no-leidas/count} autenticado como USUARIO retorna 200 OK con
+     * {@code {"cantidad": N}} donde N cuenta EXCLUSIVAMENTE las notificaciones accionables de
+     * su rol con {@code leida=false}.
+     *
+     * <p>Fixture para A: dos accionables no leídas (cuentan), una accionable ya leída (no
+     * cuenta), una diaria no leída {@code COMPRA_PENDIENTE_DIARIA} (no cuenta — fuera del set
+     * accionable según plan.md §Notificaciones, fila "Unicidad por elemento pendiente") y una
+     * fuera de rol no leída {@code AVISO_TRANSACCION_ABIERTA} (no cuenta). B posee una
+     * accionable no leída que tampoco debe contar (aislamiento por destinatario).</p>
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("GET /notificaciones/no-leidas/count como USER cuenta solo accionables no leídas propias")
+    void contar_UsuarioConNoLeidasAccionables_Retorna200CantidadCorrecta() throws Exception {
+        notificacionRepository.save(
+                new Notificacion(usuarioA, "Compra confirmada 1", "COMPRA_CONFIRMADA", ahora()));
+        notificacionRepository.save(
+                new Notificacion(usuarioA, "Envío marcado 2", "ENVIO_MARCADO", ahora()));
+
+        Notificacion leida = notificacionRepository.save(
+                new Notificacion(usuarioA, "Compra confirmada ya leída", "COMPRA_CONFIRMADA", ahora()));
+        leida.setLeida(true);
+        notificacionRepository.save(leida);
+
+        notificacionRepository.save(
+                new Notificacion(usuarioA, "Recordatorio diario de compra", "COMPRA_PENDIENTE_DIARIA", ahora()));
+        notificacionRepository.save(
+                new Notificacion(usuarioA, "Aviso fuera del set accionable", "AVISO_TRANSACCION_ABIERTA", ahora()));
+
+        notificacionRepository.save(
+                new Notificacion(usuarioB, "Accionable de B: no cuenta para A", "COMPRA_CONFIRMADA", ahora()));
+
+        Cookie cookieUsuarioA = obtenerCookieJwtPostLogin(usuarioA);
+
+        mockMvc.perform(get("/notificaciones/no-leidas/count").cookie(cookieUsuarioA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cantidad").value(2));
+    }
+
+    /**
+     * Verifica que ADMIN recibe SU PROPIA cantidad (PHA15TSK05): el contador usa la lista de
+     * tipos accionables del rol ADMIN (moderación/disputas), excluye leídas, excluye tipos de
+     * otros roles y excluye las diarias.
+     *
+     * <p>Política única de fixtures ADMIN (PHA12TSK06): este escenario NO crea ninguna fila
+     * ADMIN; inicia sesión exclusivamente con el administrador único provisionado por el
+     * contexto de test (seed V6, {@code ADMIN_EMAIL}/{@code ADMIN_PASSWORD_HASH}) mediante
+     * {@link #prepararEscenarioAdminUnico()} y {@link #obtenerAdminUnico()}.</p>
+     *
+     * @throws Exception si falla la interacción HTTP o la preparación del escenario
+     */
+    @Test
+    @DisplayName("GET /notificaciones/no-leidas/count como ADMIN cuenta solo moderación/disputas no leídas")
+    void contar_AdminRecibeSuCantidadPropia_Retorna200CantidadCorrecta() throws Exception {
+        prepararEscenarioAdminUnico();
+        Usuario admin = obtenerAdminUnico();
+
+        notificacionRepository.save(
+                new Notificacion(admin, "Publicación pendiente 1", "PUBLICACION_PENDIENTE_APROBAR", ahora()));
+        notificacionRepository.save(
+                new Notificacion(admin, "Disputa pendiente 2", "DISPUTA_PENDIENTE_RESOLVER", ahora()));
+
+        Notificacion leida = notificacionRepository.save(
+                new Notificacion(admin, "Disputa ya leída", "DISPUTA_PENDIENTE_RESOLVER", ahora()));
+        leida.setLeida(true);
+        notificacionRepository.save(leida);
+
+        notificacionRepository.save(
+                new Notificacion(admin, "Tipo de rol USER: no cuenta", "COMPRA_CONFIRMADA", ahora()));
+        notificacionRepository.save(
+                new Notificacion(admin, "Diaria: no cuenta", "VENTA_POR_ENTREGAR_DIARIA", ahora()));
+
+        Cookie cookieAdmin = obtenerCookieJwtPostLogin(admin);
+
+        mockMvc.perform(get("/notificaciones/no-leidas/count").cookie(cookieAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cantidad").value(2));
+    }
+
+    /**
+     * Verifica el caso sin datos para un usuario autenticado (PHA15TSK05): sin notificaciones
+     * propias recibe 200 OK con {@code {"cantidad": 0}} — cero es una respuesta válida, no un
+     * error. La única notificación sembrada pertenece a B, de modo que el cero acredita a la vez
+     * el aislamiento por destinatario.
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("GET /notificaciones/no-leidas/count sin notificaciones propias retorna cantidad 0")
+    void contar_UsuarioSinNotificaciones_Retorna200CantidadCero() throws Exception {
+        notificacionRepository.save(
+                new Notificacion(usuarioB, "Solo B tiene notificaciones", "COMPRA_CONFIRMADA", ahora()));
+
+        Cookie cookieUsuarioA = obtenerCookieJwtPostLogin(usuarioA);
+
+        mockMvc.perform(get("/notificaciones/no-leidas/count").cookie(cookieUsuarioA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cantidad").value(0));
+    }
+
+    /**
+     * Verifica la protección de la cadena de seguridad para la ruta nueva (PHA15TSK05): {@code
+     * GET /notificaciones/no-leidas/count} sin cookie JWT retorna 403 Forbidden (cubierto por
+     * {@code anyRequest().authenticated()} de {@code SecurityConfig}, sin requestMatcher nuevo).
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("GET /notificaciones/no-leidas/count sin autenticación retorna 403 Forbidden")
+    void contar_SinAutenticacion_Retorna403Forbidden() throws Exception {
+        mockMvc.perform(get("/notificaciones/no-leidas/count"))
+                .andExpect(status().isForbidden());
+    }
+
+    /**
+     * Verifica la integración con el PATCH existente (regresión exigida por PHA15TSK05): marcar
+     * la única notificación no leída de A mediante {@code PATCH /notificaciones/{id}/leer}
+     * reduce el conteo de 1 a 0, sin recargar ni recrear datos.
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("PATCH /notificaciones/{id}/leer actualiza el conteo de no leídas (1 -> 0)")
+    void contar_MarcarComoLeidaActualizaElConteo() throws Exception {
+        Notificacion notificacion = notificacionRepository.save(
+                new Notificacion(usuarioA, "Única no leída de A", "COMPRA_CONFIRMADA", ahora()));
+        Cookie cookieUsuarioA = obtenerCookieJwtPostLogin(usuarioA);
+
+        mockMvc.perform(get("/notificaciones/no-leidas/count").cookie(cookieUsuarioA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cantidad").value(1));
+
+        mockMvc.perform(patch("/notificaciones/" + notificacion.getId() + "/leer").cookie(cookieUsuarioA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.leida").value(true));
+
+        mockMvc.perform(get("/notificaciones/no-leidas/count").cookie(cookieUsuarioA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cantidad").value(0));
+    }
+
+    /**
+     * Verifica constitution principio 7 aplicado al contador (PHA15TSK05): el endpoint NO lee
+     * parámetro alguno del cliente — usuario y rol salen exclusivamente del JWT. Un query param
+     * Client-side ({@code usuarioId} de otro usuario, {@code rol} suplantado) es ignorado por
+     * completo: la respuesta sigue siendo la cantidad del autenticado.
+     *
+     * @throws Exception si falla la interacción HTTP
+     */
+    @Test
+    @DisplayName("GET /notificaciones/no-leidas/count ignora parámetros del cliente (identidad solo del JWT)")
+    void contar_ParametrosDelClienteNoInfluyen_RetornaCantidadDelJwt() throws Exception {
+        notificacionRepository.save(
+                new Notificacion(usuarioB, "Accionable de B", "COMPRA_CONFIRMADA", ahora()));
+
+        Cookie cookieUsuarioA = obtenerCookieJwtPostLogin(usuarioA);
+
+        mockMvc.perform(get("/notificaciones/no-leidas/count")
+                        .queryParam("usuarioId", String.valueOf(usuarioB.getId()))
+                        .queryParam("rol", "ADMIN")
+                        .cookie(cookieUsuarioA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cantidad").value(0));
     }
 
     /**

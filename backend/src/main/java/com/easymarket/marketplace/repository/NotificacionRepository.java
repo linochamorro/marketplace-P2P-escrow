@@ -128,4 +128,20 @@ public interface NotificacionRepository extends JpaRepository<Notificacion, Long
      * @return matching notifications of that recipient, newest first
      */
     List<Notificacion> findByUsuarioIdAndTipoInOrderByCreatedAtDescIdDesc(Long usuarioId, List<String> tipos);
+
+    /**
+     * Counts the unread actionable notifications of one recipient whose type is one of the
+     * supplied actionable types (PHA15TSK05).
+     *
+     * <p>The endpoint {@code GET /notificaciones/no-leidas/count} invokes this through
+     * {@code NotificacionService.contarNoLeidasPorUsuarioYRol}, passing exactly the same role
+     * type lists used by {@link #findByUsuarioIdAndTipoInOrderByCreatedAtDescIdDesc(Long, List)}
+     * so the badge and the listing can never diverge in criterion. Read-only aggregate query in
+     * a single round trip: no entity hydration, no state transition and no ledger write.</p>
+     *
+     * @param usuarioId recipient to match
+     * @param tipos stable notification types considered actionable for the caller's role
+     * @return number of matching notifications with {@code leida = false} (zero when none)
+     */
+    long countByUsuarioIdAndTipoInAndLeidaFalse(Long usuarioId, List<String> tipos);
 }

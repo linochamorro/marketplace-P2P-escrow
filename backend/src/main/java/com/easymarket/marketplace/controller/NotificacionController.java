@@ -1,5 +1,6 @@
 package com.easymarket.marketplace.controller;
 
+import com.easymarket.marketplace.dto.CantidadNoLeidasResponseDto;
 import com.easymarket.marketplace.dto.NotificacionResponseDto;
 import com.easymarket.marketplace.model.Notificacion;
 import com.easymarket.marketplace.security.UsuarioPrincipal;
@@ -18,7 +19,7 @@ import java.util.List;
  * Endpoint REST de notificaciones in-app del usuario autenticado (Story 7b, spec.md; PHA09TSK05
  * recuperado en PHA12TSK04).
  *
- * <p>Expone dos operaciones, ambas delegadas en {@link NotificacionService} — el controlador no
+ * <p>Expone tres operaciones, todas delegadas en {@link NotificacionService} — el controlador no
  * toca repositorios ni aplica lógica de filtrado por su cuenta:</p>
  * <ul>
  *   <li>{@code GET /notificaciones}: lista las notificaciones del usuario autenticado cuyo tipo
@@ -33,6 +34,9 @@ import java.util.List;
  *       a otro usuario ({@code UsuarioNoAutorizadoException}), ambos mapeados en
  *       {@code GlobalExceptionHandler}. La operación es idempotente: marcar una notificación ya
  *       leída retorna 200 con la misma entidad.</li>
+ *   <li>{@code GET /notificaciones/no-leidas/count} (PHA15TSK05): contador {@code {"cantidad": N}}
+ *       de notificaciones accionables no leídas del rol del JWT, con el MISMO criterio por rol
+ *       del listado; sin parámetros del cliente (constitution, principio 7).</li>
  * </ul>
  *
  * <p>Las rutas quedan protegidas por {@code anyRequest().authenticated()} de
@@ -102,5 +106,32 @@ public class NotificacionController {
     ) {
         Notificacion actualizada = notificacionService.marcarComoLeida(notificacionId, principal.id());
         return ResponseEntity.ok(NotificacionResponseDto.fromEntity(actualizada));
+    }
+
+    /**
+     * Endpoint REST {@code GET /notificaciones/no-leidas/count} para el contador de notificaciones
+     * accionables no leídas del usuario autenticado (PHA15TSK05; plan.md §Notificaciones, fila
+     * "Contador de pendientes").
+     *
+     * <p>Devuelve la forma exacta {@code {"cantidad": N}} exigida por el contrato, contando
+     * EXCLUSIVAMENTE las notificaciones accionables del rol del JWT con {@code leida=false}
+     * mediante {@code NotificacionService.contarNoLeidasPorUsuarioYRol} — el mismo criterio por
+     * rol del listado {@code GET /notificaciones}. No acepta ni lee parámetro alguno: usuario y
+     * rol se resuelven exclusivamente desde {@code principal.id()} y {@code principal.rol()}
+     * (constitution, principio 7), y el conteo de otro usuario jamás puede solicitarse desde el
+     * cliente. Los avisos diarios y periódicos quedan fuera del set accionable (plan.md,
+     * fila "Unicidad por elemento pendiente"). La ruta queda protegida por
+     * {@code anyRequest().authenticated()} de {@code SecurityConfig} (sin requestMatcher nuevo).</p>
+     *
+     * @param principal identidad y rol del usuario autenticado mediante JWT
+     * @return {@link ResponseEntity} con código HTTP 200 OK y el DTO {@code {"cantidad": N}};
+     *         {@code cantidad} es {@code 0} cuando el autenticado no tiene ninguna
+     */
+    @GetMapping("/no-leidas/count")
+    public ResponseEntity<CantidadNoLeidasResponseDto> contarNoLeidas(
+            @AuthenticationPrincipal UsuarioPrincipal principal
+    ) {
+        long cantidad = notificacionService.contarNoLeidasPorUsuarioYRol(principal.id(), principal.rol());
+        return ResponseEntity.ok(new CantidadNoLeidasResponseDto(cantidad));
     }
 }
