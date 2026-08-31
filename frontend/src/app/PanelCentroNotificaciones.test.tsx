@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PanelCentroNotificaciones, { NotificacionUI } from './PanelCentroNotificaciones';
+import { EVENTO_NOTIFICACION_LEIDA, categoriaNotificacion } from './notificaciones-utils';
 
 // Mock de next/navigation para las notificaciones accionables (PHA12TSK05): el componente
 // usa useRouter().push SOLO después de un PATCH exitoso (decisión 4 de PHA09TSK05-L01).
@@ -451,5 +452,159 @@ describe('PanelCentroNotificaciones — notificaciones accionables (PHA12TSK05)'
 
     // Sin navegación: el botón solo marca leída (decisión 5 de PHA09TSK05-L01).
     expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Pruebas de la categoría visible y de la sincronización con el header (PHA15TSK06).
+ *
+ * <p>Criterio de aceptación literal de la tarea: "identificar visualmente cada
+ * aviso con una categoría/etiqueta legible derivada del tipo estable: compra
+ * nueva, estado de compra/envío, recordatorio periódico, moderación, disputa o
+ * advertencia; no crear categoría de aprobación de compra". Adicionalmente, el
+ * panel emite el evento de ventana {@code easymarket:notificacion-leida} tras
+ * un PATCH exitoso para que el header refresque su contador (mecanismo
+ * declarado de sincronización sin dependencias nuevas).</p>
+ */
+describe('PanelCentroNotificaciones — categoría visible y sincronización (PHA15TSK06)', () => {
+  const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockPush.mockClear();
+    process.env.NEXT_PUBLIC_API_URL = BASE;
+  });
+
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
+  });
+
+  /**
+   * Verifica la clasificación completa de los 13 tipos estables del contrato
+   * (los 7 accionables USER, los 2 accionables ADMIN, los 3 recordatorios
+   * periódicos y {@code NUEVA_PUBLICACION_PENDIENTE}) contra las 6 categorías
+   * legibles de la tarea, más el fallback declarado "Otro" para tipos
+   * desconocidos. NO existe categoría de aprobación de compra.
+   */
+  it('categoriaNotificacion clasifica los 13 tipos estables con fallback "Otro"', () => {
+    // Compra nueva.
+    expect(categoriaNotificacion('COMPRA_CONFIRMADA')).toBe('Compra nueva');
+    // Estado de compra/envío.
+    expect(categoriaNotificacion('ENVIO_MARCADO')).toBe('Estado de compra/envío');
+    expect(categoriaNotificacion('ENTREGA_MARCADA')).toBe('Estado de compra/envío');
+    // Recordatorio periódico.
+    expect(categoriaNotificacion('COMPRA_PENDIENTE_DIARIA')).toBe('Recordatorio periódico');
+    expect(categoriaNotificacion('VENTA_POR_ENTREGAR_DIARIA')).toBe('Recordatorio periódico');
+    expect(categoriaNotificacion('ENVIO_PENDIENTE_48H')).toBe('Recordatorio periódico');
+    // Moderación.
+    expect(categoriaNotificacion('PUBLICACION_PENDIENTE_APROBAR')).toBe('Moderación');
+    expect(categoriaNotificacion('NUEVA_PUBLICACION_PENDIENTE')).toBe('Moderación');
+    expect(categoriaNotificacion('PUBLICACION_APROBADA_RECHAZADA')).toBe('Moderación');
+    // Disputa.
+    expect(categoriaNotificacion('DISPUTA_PENDIENTE_RESOLVER')).toBe('Disputa');
+    expect(categoriaNotificacion('DISPUTA_ABIERTA')).toBe('Disputa');
+    expect(categoriaNotificacion('DISPUTA_RESUELTA')).toBe('Disputa');
+    // Advertencia.
+    expect(categoriaNotificacion('RESPUESTA_USUARIO_PENDIENTE')).toBe('Advertencia');
+    // Fallback declarado para tipo desconocido.
+    expect(categoriaNotificacion('TIPO_FUTURO_DESCONOCIDO')).toBe('Otro');
+  });
+
+  /**
+   * Verifica el render: cada fila muestra una etiqueta discreta con su
+   * categoría legible derivada del tipo, sin alterar la navegación ni el botón
+   * "Marcar como leída".
+   *
+   * @returns promesa resuelta cuando las aserciones de etiquetas pasan
+   */
+  it('cada fila renderiza su etiqueta de categoría legible (estilo discreto)', async () => {
+    const notificaciones = [
+      notificacionBase({ id: 1, tipo: 'COMPRA_CONFIRMADA', mensaje: 'Confirmaste la recepción de tu compra #41', transaccionId: 41 }),
+      notificacionBase({ id: 2, tipo: 'COMPRA_PENDIENTE_DIARIA', mensaje: 'Tu compra sigue pendiente' }),
+      notificacionBase({ id: 3, tipo: 'NUEVA_PUBLICACION_PENDIENTE', mensaje: 'Nueva publicación pendiente', transaccionId: null }),
+      notificacionBase({ id: 4, tipo: 'DISPUTA_ABIERTA', mensaje: 'Abriste una disputa sobre tu compra #42', transaccionId: 42 }),
+      notificacionBase({ id: 5, tipo: 'TIPO_FUTURO_DESCONOCIDO', mensaje: 'Aviso de tipo futuro', transaccionId: null })
+    ];
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(notificaciones));
+    global.fetch = fetchMock;
+
+    render(<PanelCentroNotificaciones />);
+
+    await screen.findByText('Confirmaste la recepción de tu compra #41');
+
+    // Etiquetas de categoría legibles por fila (una por fila, 5 filas).
+    expect(screen.getByText('Compra nueva')).toBeInTheDocument();
+    expect(screen.getByText('Recordatorio periódico')).toBeInTheDocument();
+    expect(screen.getByText('Moderación')).toBeInTheDocument();
+    expect(screen.getByText('Disputa')).toBeInTheDocument();
+    expect(screen.getByText('Otro')).toBeInTheDocument();
+
+    // La navegación se conserva intacta: solo las filas con destino determinable por
+    // rutaDestino son links (COMPRA_CONFIRMADA con "tu compra" y DISPUTA_ABIERTA con "tu
+    // compra"); los recordatorios/NUEVA_PUBLICACION/tipo desconocido quedan como texto plano.
+    expect(screen.getAllByRole('link')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Marcar como leída' })).toHaveLength(5);
+  });
+
+  /**
+   * Verifica el mecanismo de sincronización con el header: tras un PATCH
+   * exitoso de "Marcar como leída" el panel emite el evento de ventana
+   * {@code easymarket:notificacion-leida} (una sola vez por marcado exitoso);
+   * ante un PATCH fallido NO emite el evento.
+   *
+   * @returns promesa resuelta cuando las aserciones del evento pasan
+   */
+  it('emite easymarket:notificacion-leida tras el PATCH exitoso y no lo emite si falla', async () => {
+    const entrega = notificacionBase({ id: 9, tipo: 'ENTREGA_MARCADA', mensaje: 'El vendedor marcó tu compra #46 como entregada', transaccionId: 46 });
+    const oyente = vi.fn();
+    window.addEventListener(EVENTO_NOTIFICACION_LEIDA, oyente);
+
+    // PATCH exitoso: el evento se emite.
+    const fetchMock = vi.fn().mockImplementation((url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+      }
+      return Promise.resolve(okResponse([entrega]));
+    });
+    global.fetch = fetchMock;
+
+    const { unmount } = render(<PanelCentroNotificaciones />);
+    expect(await screen.findByText('No leída')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como leída' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(`${BASE}/notificaciones/9/leer`, {
+        method: 'PATCH',
+        credentials: 'include'
+      });
+    });
+    await waitFor(() => expect(oyente).toHaveBeenCalledTimes(1));
+    unmount();
+
+    // PATCH fallido (403): sin evento.
+    const oyente2 = vi.fn();
+    window.addEventListener(EVENTO_NOTIFICACION_LEIDA, oyente2);
+    global.fetch = vi.fn().mockImplementation((url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        return Promise.resolve({
+          ok: false,
+          status: 403,
+          json: async () => ({ mensaje: 'No autorizado' })
+        });
+      }
+      return Promise.resolve(okResponse([entrega]));
+    });
+
+    render(<PanelCentroNotificaciones />);
+    expect(await screen.findByText('No leída')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como leída' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('No autorizado')).toBeInTheDocument();
+    });
+    expect(oyente2).not.toHaveBeenCalled();
+    window.removeEventListener(EVENTO_NOTIFICACION_LEIDA, oyente);
+    window.removeEventListener(EVENTO_NOTIFICACION_LEIDA, oyente2);
   });
 });

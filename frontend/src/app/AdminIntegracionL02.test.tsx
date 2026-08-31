@@ -79,6 +79,9 @@ describe('PHA06TSK13-L02 - cobertura administrativa requerida', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       expect(init).toEqual(expect.objectContaining({ method: 'GET', credentials: 'include' }));
+      // PHA15TSK06: la campana del shell consulta el contador al cargar la sesión (sin signal:
+      // no es una lectura administrativa abortable). Se responde antes del gate de signal.
+      if (url === `${BASE}/notificaciones/no-leidas/count`) return respuesta({ cantidad: 0 });
       if (url !== `${BASE}/usuarios/me`) expect(init?.signal).toBeInstanceOf(AbortSignal);
       if (url === `${BASE}/usuarios/me`) return respuesta(ADMIN);
       if (url === `${BASE}/publicaciones?estado=PENDIENTE_REVISION`) return respuesta([{
@@ -95,13 +98,15 @@ describe('PHA06TSK13-L02 - cobertura administrativa requerida', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('La clasificación de una publicación pendiente no existe en el catálogo');
     expect(screen.queryByText('Panel de Moderaciones (Admin)')).not.toBeInTheDocument();
     expect(screen.queryByText('Clasificación rota')).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('acepta fechas de envío y entrega null del DTO real y conserva controles ADMIN', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       expect(init).toEqual(expect.objectContaining({ method: 'GET', credentials: 'include' }));
+      // PHA15TSK06: contador de la campana antes del gate de signal (sin AbortSignal).
+      if (url === `${BASE}/notificaciones/no-leidas/count`) return respuesta({ cantidad: 0 });
       if (url !== `${BASE}/usuarios/me`) expect(init?.signal).toBeInstanceOf(AbortSignal);
       if (url === `${BASE}/usuarios/me`) return respuesta(ADMIN);
       if (url === `${BASE}/admin/disputas`) return respuesta([{
@@ -118,13 +123,15 @@ describe('PHA06TSK13-L02 - cobertura administrativa requerida', () => {
     expect(await screen.findByText('Teclado sin fechas posteriores')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /liberar fondos/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /reembolsar al comprador/i })).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('conserva la cuenta y muestra el mensaje backend cuando falla el POST de desbloqueo', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === `${BASE}/usuarios/me`) return respuesta(ADMIN);
+      // PHA15TSK06: contador de la campana del shell (no es lectura admin).
+      if (url === `${BASE}/notificaciones/no-leidas/count`) return respuesta({ cantidad: 0 });
       if (url === `${BASE}/admin/usuarios/bloqueados`) return respuesta([{ usuarioId: 93, email: 'bloqueado@example.com' }]);
       if (url === `${BASE}/admin/usuarios/93/desbloquear`) {
         expect(init).toEqual({ method: 'POST', credentials: 'include' });
@@ -139,7 +146,7 @@ describe('PHA06TSK13-L02 - cobertura administrativa requerida', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('La cuenta ya no tiene bloqueo permanente');
     expect(screen.getByText('bloqueado@example.com')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('aborta causalmente la lectura administrativa al desmontar la ruta', async () => {
@@ -147,6 +154,9 @@ describe('PHA06TSK13-L02 - cobertura administrativa requerida', () => {
     let signalAdmin: AbortSignal | undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === `${BASE}/usuarios/me`) return respuesta(ADMIN);
+      // PHA15TSK06: el contador de la campana no es lectura abortable — se responde antes de
+      // capturar el signal de la lectura administrativa para no ensuciar la aserción de aborto.
+      if (String(input) === `${BASE}/notificaciones/no-leidas/count`) return respuesta({ cantidad: 0 });
       signalAdmin = init?.signal ?? undefined;
       return cargaTardia.promise;
     });
@@ -159,7 +169,7 @@ describe('PHA06TSK13-L02 - cobertura administrativa requerida', () => {
     vista.unmount();
 
     expect(signalAdmin?.aborted).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('valida el motivo de otra publicación aunque una moderación siga en vuelo, sin segundo PATCH', async () => {
@@ -261,7 +271,11 @@ describe('PHA06TSK13-L02 - cobertura administrativa requerida', () => {
   it('mantiene loading hasta sincronizar la lista de bloqueados y nunca deja un frame vacío', async () => {
     const cargaBloqueados = diferido<Response>();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input) === `${BASE}/usuarios/me`) return respuesta(ADMIN);
+      const url = String(input);
+      if (url === `${BASE}/usuarios/me`) return respuesta(ADMIN);
+      // PHA15TSK06: contador de la campana del shell, resuelto de inmediato (no participa del
+      // diferido de la lectura administrativa).
+      if (url === `${BASE}/notificaciones/no-leidas/count`) return respuesta({ cantidad: 0 });
       return cargaBloqueados.promise;
     });
     global.fetch = fetchMock;
@@ -276,7 +290,7 @@ describe('PHA06TSK13-L02 - cobertura administrativa requerida', () => {
 
     expect(screen.queryByText(/cargando datos administrativos/i) ?? screen.queryByText('sin-frame@example.com')).not.toBeNull();
     expect(await screen.findByText('sin-frame@example.com')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('doble acción de desbloqueo en el mismo tick produce un solo POST y una sola retirada tras 200', async () => {

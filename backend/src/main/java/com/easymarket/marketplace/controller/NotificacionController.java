@@ -22,12 +22,13 @@ import java.util.List;
  * <p>Expone tres operaciones, todas delegadas en {@link NotificacionService} — el controlador no
  * toca repositorios ni aplica lógica de filtrado por su cuenta:</p>
  * <ul>
- *   <li>{@code GET /notificaciones}: lista las notificaciones del usuario autenticado cuyo tipo
- *       pertenece a la lista de SU ROL en el JWT (ADMIN: moderación/disputas; USER:
- *       compra/venta/envío/disputa) mediante {@code listarPorUsuarioYRol}. El filtro por rol se
- *       aplica en backend (decisión 3 de PHA09TSK05-L01); la identidad proviene exclusivamente de
- *       {@link UsuarioPrincipal}, sin filtros, paginación ni parámetros de consulta en el
- *       contrato.</li>
+ *   <li>{@code GET /notificaciones}: lista las notificaciones VISIBLES del usuario autenticado
+ *       según su rol en el JWT (desde PHA15TSK06, decisión de Lino 2026-08-30: el listado es un
+ *       SUPERCONJUNTO del badge — ADMIN: moderación/disputas más {@code NUEVA_PUBLICACION_PENDIENTE};
+ *       USER: compra/venta/envío/disputa más los recordatorios periódicos del propio rol)
+ *       mediante {@code listarPorUsuarioYRol}. El filtro por rol se aplica en backend (decisión 3
+ *       de PHA09TSK05-L01); la identidad proviene exclusivamente de {@link UsuarioPrincipal},
+ *       sin filtros, paginación ni parámetros de consulta en el contrato.</li>
  *   <li>{@code PATCH /notificaciones/{id}/leer}: marca una notificación como leída mediante
  *       {@code marcarComoLeida(notificacionId, usuarioId)} con validación de propiedad — 404 si
  *       la notificación no existe ({@code NotificacionNoEncontradaException}) y 403 si pertenece
@@ -35,8 +36,10 @@ import java.util.List;
  *       {@code GlobalExceptionHandler}. La operación es idempotente: marcar una notificación ya
  *       leída retorna 200 con la misma entidad.</li>
  *   <li>{@code GET /notificaciones/no-leidas/count} (PHA15TSK05): contador {@code {"cantidad": N}}
- *       de notificaciones accionables no leídas del rol del JWT, con el MISMO criterio por rol
- *       del listado; sin parámetros del cliente (constitution, principio 7).</li>
+ *       de notificaciones accionables no leídas del rol del JWT, con el criterio accionable
+ *       puro — un SUBCONJUNTO del listado visible desde PHA15TSK06 (plan.md §Notificaciones,
+ *       fila "Visibilidad del panel (listado vs badge)"); sin parámetros del cliente
+ *       (constitution, principio 7).</li>
  * </ul>
  *
  * <p>Las rutas quedan protegidas por {@code anyRequest().authenticated()} de
@@ -59,17 +62,18 @@ public class NotificacionController {
     }
 
     /**
-     * Endpoint REST {@code GET /notificaciones} para listar las notificaciones accionables del
-     * usuario autenticado según su rol (Story 7b; PHA09TSK05 recuperado en PHA12TSK04).
+     * Endpoint REST {@code GET /notificaciones} para listar las notificaciones visibles del
+     * usuario autenticado según su rol (Story 7b; PHA09TSK05 recuperado en PHA12TSK04;
+     * superconjunto del badge desde PHA15TSK06 por decisión de Lino 2026-08-30).
      *
      * <p>Devuelve un array JSON (posiblemente vacío) con SOLO las notificaciones cuyo tipo
-     * pertenece a la lista del rol del JWT, ordenadas por fecha de creación descendente (con el
-     * ID como desempate). No expone el destinatario porque la identidad se resuelve
-     * exclusivamente desde {@code principal.id()} y el filtro de tipos se resuelve exclusivamente
-     * desde {@code principal.rol()}.</p>
+     * pertenece a la lista VISIBLE del rol del JWT, ordenadas por fecha de creación descendente
+     * (con el ID como desempate). No expone el destinatario porque la identidad se resuelve
+     * exclusivamente desde {@code principal.id()} y el filtro de tipos se resuelve
+     * exclusivamente desde {@code principal.rol()}.</p>
      *
      * @param principal identidad y rol del usuario autenticado mediante JWT
-     * @return {@link ResponseEntity} con código HTTP 200 OK y lista de DTOs filtrada por rol
+     * @return {@link ResponseEntity} con código HTTP 200 OK y lista de DTOs visibles del rol
      */
     @GetMapping
     public ResponseEntity<List<NotificacionResponseDto>> listarPorUsuario(
@@ -115,12 +119,13 @@ public class NotificacionController {
      *
      * <p>Devuelve la forma exacta {@code {"cantidad": N}} exigida por el contrato, contando
      * EXCLUSIVAMENTE las notificaciones accionables del rol del JWT con {@code leida=false}
-     * mediante {@code NotificacionService.contarNoLeidasPorUsuarioYRol} — el mismo criterio por
-     * rol del listado {@code GET /notificaciones}. No acepta ni lee parámetro alguno: usuario y
-     * rol se resuelven exclusivamente desde {@code principal.id()} y {@code principal.rol()}
-     * (constitution, principio 7), y el conteo de otro usuario jamás puede solicitarse desde el
-     * cliente. Los avisos diarios y periódicos quedan fuera del set accionable (plan.md,
-     * fila "Unicidad por elemento pendiente"). La ruta queda protegida por
+     * mediante {@code NotificacionService.contarNoLeidasPorUsuarioYRol} — un SUBCONJUNTO del
+     * listado visible de {@code GET /notificaciones} desde PHA15TSK06 (decisión de Lino
+     * 2026-08-30): los recordatorios periódicos del USUARIO y {@code NUEVA_PUBLICACION_PENDIENTE}
+     * del ADMIN son visibles en el panel pero NO inflan el contador. No acepta ni lee parámetro
+     * alguno: usuario y rol se resuelven exclusivamente desde {@code principal.id()} y
+     * {@code principal.rol()} (constitution, principio 7), y el conteo de otro usuario jamás
+     * puede solicitarse desde el cliente. La ruta queda protegida por
      * {@code anyRequest().authenticated()} de {@code SecurityConfig} (sin requestMatcher nuevo).</p>
      *
      * @param principal identidad y rol del usuario autenticado mediante JWT

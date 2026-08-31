@@ -1,7 +1,8 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Shell, { DESTINOS_ADMIN, DESTINOS_USUARIO, GRUPOS_USUARIO, esRutaConShell } from './Shell';
+import { EVENTO_NOTIFICACION_LEIDA } from './notificaciones-utils';
 import { ErrorApiSesion, type UsuarioActualUI } from './sesion-utils';
 
 /**
@@ -680,5 +681,287 @@ describe('Shell — marca clicable (PHA09TSK01)', () => {
 
     expect(screen.getByText('EasyMarket')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'EasyMarket' })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Pruebas de la campana de notificaciones del header (PHA15TSK06).
+ *
+ * <p>Criterio de aceptación literal de la tarea: "ícono accesible de
+ * notificaciones para ADMIN y USUARIO, enlazado a `/notificaciones`, con
+ * contador de no leídas obtenido del endpoint autorizado... Actualizar
+ * contador al cargar sesión, volver al foco y después de marcar como leída,
+ * sin duplicar fetches ni romper navegación".</p>
+ *
+ * <p>Decisiones cubiertas:</p>
+ * <ul>
+ *   <li>La campana es un `Link` a `/notificaciones` con nombre accesible
+ *       "Ver notificaciones", visible SOLO con sesión autenticada (estado
+ *       `autenticado`), para ambos roles. El nombre accesible NO es
+ *       "Notificaciones" a propósito: colisionaría con el enlace del sidebar
+ *       del mismo nombre y rompería la resolución `getByRole` existente.</li>
+ *   <li>Badge numérico SOLO cuando la cantidad es mayor a cero; cantidad 0,
+ *       error de red o HTTP no-ok → sin badge y header funcional.</li>
+ *   <li>Fetch del contador `GET /notificaciones/no-leidas/count` con
+ *       `credentials: 'include'` al cargar sesión, al recuperar el foco de la
+ *       ventana y al recibir el evento de ventana
+ *       `easymarket:notificacion-leida` que emite el panel tras marcar como
+ *       leída (mecanismo de sincronización sin dependencias nuevas).</li>
+ *   <li>Anti-duplicación: focos repetidos mientras la consulta está en vuelo
+ *       no agregan peticiones (guarda de concurrencia).</li>
+ * </ul>
+ */
+describe('Shell — campana de notificaciones (PHA15TSK06)', () => {
+  const apiUrlOriginal = process.env.NEXT_PUBLIC_API_URL;
+
+  /** Respuesta 200 del endpoint del contador con la cantidad dada. */
+  function okCantidad(cantidad: number) {
+    return { ok: true, status: 200, json: async () => ({ cantidad }) };
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockReplace.mockClear();
+    mockPathname.mockReturnValue('/publicaciones');
+    process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8080';
+  });
+
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_API_URL = apiUrlOriginal;
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Verifica la campana para USUARIO: enlace en el header (role banner) con
+   * href `/notificaciones`, nombre accesible "Ver notificaciones" y badge
+   * numérico con la cantidad devuelta por el endpoint del contador, al que se
+   * consulta con `credentials: 'include'` al cargar la sesión.
+   *
+   * @returns promesa resuelta cuando todas las aserciones de campana pasan
+   */
+  it('USUARIO autenticado: campana en el header enlaza /notificaciones y muestra el badge con la cantidad', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okCantidad(3));
+    global.fetch = fetchMock;
+
+    render(
+      <Shell obtenerUsuarioActual={async () => USUARIO}>
+        <span>Contenido protegido</span>
+      </Shell>
+    );
+
+    await screen.findByRole('link', { name: 'Mercado' });
+
+    const header = screen.getByRole('banner');
+    const campana = within(header).getByRole('link', { name: 'Ver notificaciones' });
+    expect(campana).toHaveAttribute('href', '/notificaciones');
+    // El fetch del contador resuelve después del render: findByText espera el badge.
+    expect(await within(campana).findByText('3')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/notificaciones/no-leidas/count', {
+        method: 'GET',
+        credentials: 'include',
+      });
+    });
+  });
+
+  /**
+   * Verifica que el rol ADMIN también recibe la campana con su propio contador
+   * (el endpoint es el mismo; el rol lo resuelve el backend desde el JWT).
+   *
+   * @returns promesa resuelta cuando todas las aserciones de campana pasan
+   */
+  it('ADMIN autenticado: también ve la campana con su contador de no leídas', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okCantidad(2));
+    global.fetch = fetchMock;
+
+    render(
+      <Shell obtenerUsuarioActual={async () => ADMIN}>
+        <span>Contenido protegido</span>
+      </Shell>
+    );
+
+    await screen.findByRole('link', { name: 'Administración' });
+
+    const header = screen.getByRole('banner');
+    const campana = within(header).getByRole('link', { name: 'Ver notificaciones' });
+    expect(await within(campana).findByText('2')).toBeInTheDocument();
+  });
+
+  /**
+   * Verifica el estado cero: cantidad 0 del backend → el enlace de la campana
+   * existe pero SIN badge numérico (un "0" engañoso no se renderiza).
+   *
+   * @returns promesa resuelta cuando la aserción de ausencia de badge pasa
+   */
+  it('cantidad 0: campana presente pero sin badge numérico', async () => {
+    global.fetch = vi.fn().mockResolvedValue(okCantidad(0));
+
+    render(
+      <Shell obtenerUsuarioActual={async () => USUARIO}>
+        <span>Contenido protegido</span>
+      </Shell>
+    );
+
+    await screen.findByRole('link', { name: 'Mercado' });
+
+    const header = screen.getByRole('banner');
+    const campana = within(header).getByRole('link', { name: 'Ver notificaciones' });
+    await waitFor(() => {
+      expect(within(campana).queryByText('0')).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * Verifica la resiliencia del header: fallo de red en la consulta del
+   * contador → sin badge, SIN error visible y el header queda funcional (la
+   * marca y la navegación siguen presentes).
+   *
+   * @returns promesa resuelta cuando las aserciones de resiliencia pasan
+   */
+  it('error de red en el contador: sin badge y el header sigue funcional', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+    render(
+      <Shell obtenerUsuarioActual={async () => USUARIO}>
+        <span>Contenido protegido</span>
+      </Shell>
+    );
+
+    await screen.findByRole('link', { name: 'Mercado' });
+
+    const header = screen.getByRole('banner');
+    const campana = within(header).getByRole('link', { name: 'Ver notificaciones' });
+    await waitFor(() => {
+      expect(campana.querySelector('span[aria-hidden="true"]')).toBeNull();
+    });
+    // El header sigue funcional: marca y cierre de sesión presentes.
+    expect(within(header).getByText('EasyMarket')).toBeInTheDocument();
+  });
+
+  /**
+   * Verifica el refresco por foco (plan.md §Campana del header): al volver el
+   * foco a la ventana se consulta de nuevo el contador y el badge se actualiza
+   * con la cantidad fresca.
+   *
+   * @returns promesa resuelta cuando el refresco por foco pasa
+   */
+  it('al recuperar el foco de la ventana refresca el contador (1 -> 2 fetch, badge actualizado)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(okCantidad(1))
+      .mockResolvedValueOnce(okCantidad(4));
+    global.fetch = fetchMock;
+
+    render(
+      <Shell obtenerUsuarioActual={async () => USUARIO}>
+        <span>Contenido protegido</span>
+      </Shell>
+    );
+
+    await screen.findByRole('link', { name: 'Mercado' });
+    const header = screen.getByRole('banner');
+    const campana = within(header).getByRole('link', { name: 'Ver notificaciones' });
+    expect(await within(campana).findByText('1')).toBeInTheDocument();
+
+    // El usuario vuelve a la pestaña: window dispara el evento `focus`.
+    fireEvent.focus(window);
+
+    expect(await within(campana).findByText('4')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * Verifica la sincronización panel → header SIN dependencias nuevas: el
+   * evento de ventana `easymarket:notificacion-leida` (emitido por el panel
+   * tras un PATCH exitoso) dispara el refetch del contador.
+   *
+   * @returns promesa resuelta cuando el refresco por evento pasa
+   */
+  it('el evento easymarket:notificacion-leida refresca el contador tras marcar como leída', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(okCantidad(1))
+      .mockResolvedValueOnce(okCantidad(0));
+    global.fetch = fetchMock;
+
+    render(
+      <Shell obtenerUsuarioActual={async () => USUARIO}>
+        <span>Contenido protegido</span>
+      </Shell>
+    );
+
+    await screen.findByRole('link', { name: 'Mercado' });
+    const header = screen.getByRole('banner');
+    const campana = within(header).getByRole('link', { name: 'Ver notificaciones' });
+    expect(await within(campana).findByText('1')).toBeInTheDocument();
+
+    window.dispatchEvent(new Event(EVENTO_NOTIFICACION_LEIDA));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    // Con la cantidad fresca en 0 el badge desaparece (estado cero sin badge).
+    await waitFor(() => {
+      expect(within(campana).queryByText('1')).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * Verifica la guarda anti-duplicación: dos focos disparados mientras la
+   * primera consulta del contador está en vuelo NO agregan peticiones — un
+   * único fetch sirve al montaje y a los disparos concurrentes.
+   *
+   * @returns promesa resuelta cuando la guarda anti-duplicación pasa
+   */
+  it('no duplica fetches: focos concurrentes con consulta en vuelo no agregan peticiones', async () => {
+    let resolverConteo: (valor: { ok: boolean; status: number; json: () => Promise<{ cantidad: number }> }) => void =
+      () => {};
+    const conteoEnVuelo = new Promise<{ ok: boolean; status: number; json: () => Promise<{ cantidad: number }> }>(
+      (resolve) => {
+        resolverConteo = resolve;
+      }
+    );
+    const fetchMock = vi.fn().mockReturnValue(conteoEnVuelo);
+    global.fetch = fetchMock;
+
+    render(
+      <Shell obtenerUsuarioActual={async () => USUARIO}>
+        <span>Contenido protegido</span>
+      </Shell>
+    );
+
+    await screen.findByRole('link', { name: 'Mercado' });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    // Dos focos mientras la consulta del montaje sigue en vuelo.
+    fireEvent.focus(window);
+    fireEvent.focus(window);
+
+    resolverConteo(okCantidad(2));
+    await waitFor(() => {
+      expect(within(screen.getByRole('banner')).getByRole('link', { name: 'Ver notificaciones' })).toContainElement(
+        screen.getByText('2')
+      );
+    });
+    // La guarda deduplicó: sigue habiendo UNA sola petición al contador.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Verifica que la campana NO se renderiza mientras la sesión resuelve
+   * (estado `cargando`) — mismo contrato del shell de no exponer navegación
+   * hasta tener identidad autenticada.
+   */
+  it('mientras la sesión resuelve no hay campana en el header', async () => {
+    const pendiente = new Promise<UsuarioActualUI>(() => {});
+    render(
+      <Shell obtenerUsuarioActual={() => pendiente}>
+        <span>Contenido protegido</span>
+      </Shell>
+    );
+
+    const header = screen.getByRole('banner');
+    expect(within(header).queryByRole('link', { name: 'Ver notificaciones' })).not.toBeInTheDocument();
   });
 });

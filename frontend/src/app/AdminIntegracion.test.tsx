@@ -175,14 +175,22 @@ describe('PHA06TSK13 - rutas administrativas reales', () => {
     ['/admin/disputas', DisputasPage],
     ['/admin/usuarios-bloqueados', UsuariosBloqueadosPage],
   ] as const)('USUARIO en URL directa %s no renderiza acciones ni dispara lecturas/escrituras admin', async (ruta, Pagina) => {
-    const fetchMock = vi.fn().mockResolvedValue(respuesta(USUARIO));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      // PHA15TSK06: la campana del shell consulta el contador de no leídas al cargar la
+      // sesión — no es una lectura/escritura administrativa y se responde explícitamente.
+      if (url === `${BASE}/notificaciones/no-leidas/count`) return respuesta({ cantidad: 0 });
+      return respuesta(USUARIO);
+    });
     global.fetch = fetchMock;
 
     renderRuta(ruta, Pagina);
 
     expect(await screen.findByText(/no tienes permisos para acceder a esta sección/i)).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenCalledWith(`${BASE}/usuarios/me`, { method: 'GET', credentials: 'include' });
+    // La única llamada adicional del shell es el contador de la campana (PHA15TSK06).
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE}/notificaciones/no-leidas/count`, { method: 'GET', credentials: 'include' });
     const areaContenido = screen.getByRole('main');
     expect(within(areaContenido).queryAllByRole('button')).toHaveLength(0);
     expect(within(areaContenido).queryAllByRole('form')).toHaveLength(0);

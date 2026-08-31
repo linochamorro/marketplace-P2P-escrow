@@ -261,3 +261,122 @@ export async function marcarComoLeida(url: string): Promise<NotificacionUI> {
 
   return (await response.json()) as NotificacionUI;
 }
+
+/**
+ * Nombre del evento de ventana que el {@link PanelCentroNotificaciones} emite después de marcar
+ * una notificación como leída con éxito (PATCH 200) y que el {@code Shell} escucha para
+ * refrescar el contador de no leídas de la campana (PHA15TSK06).
+ *
+ * <p>Es el mecanismo declarado de sincronización panel → header: un evento de ventana nativo,
+ * sin dependencias nuevas ni estado global. La comunicación es unidireccional (solo el header
+ * reacciona) y el emisor no conoce a sus oyentes, de modo que el panel sigue funcionando de
+ * forma autónoma.</p>
+ */
+export const EVENTO_NOTIFICACION_LEIDA = 'easymarket:notificacion-leida';
+
+/**
+ * Categorías legibles con las que el panel identifica visualmente cada aviso (PHA15TSK06,
+ * tasks.md: "compra nueva, estado de compra/envío, recordatorio periódico, moderación, disputa
+ * o advertencia"). NO existe categoría de aprobación de compra (exclusión explícita de la
+ * tarea). {@code Otro} es únicamente el fallback defensivo para tipos desconocidos — no es una
+ * categoría de negocio.
+ */
+export type CategoriaNotificacion =
+  | 'Compra nueva'
+  | 'Estado de compra/envío'
+  | 'Recordatorio periódico'
+  | 'Moderación'
+  | 'Disputa'
+  | 'Advertencia'
+  | 'Otro';
+
+/**
+ * Mapeo exhaustivo de {@code tipo} → categoría legible (PHA15TSK06).
+ *
+ * <p>Cubre TODOS los tipos estables del contrato: los 7 accionables USER, los 2 accionables
+ * ADMIN, los 3 recordatorios periódicos del USUARIO y {@code NUEVA_PUBLICACION_PENDIENTE} del
+ * ADMIN (los cuatro últimos visibles en el listado desde PHA15TSK06). Cualquier tipo futuro no
+ * listado cae en el fallback "Otro" de {@link categoriaNotificacion}.</p>
+ */
+const CATEGORIA_POR_TIPO: Record<string, CategoriaNotificacion> = {
+  // Compra nueva.
+  COMPRA_CONFIRMADA: 'Compra nueva',
+  // Estado de compra/envío.
+  ENVIO_MARCADO: 'Estado de compra/envío',
+  ENTREGA_MARCADA: 'Estado de compra/envío',
+  // Recordatorio periódico (avisos diarios/48H, visibles desde PHA15TSK06).
+  COMPRA_PENDIENTE_DIARIA: 'Recordatorio periódico',
+  VENTA_POR_ENTREGAR_DIARIA: 'Recordatorio periódico',
+  ENVIO_PENDIENTE_48H: 'Recordatorio periódico',
+  // Moderación.
+  PUBLICACION_PENDIENTE_APROBAR: 'Moderación',
+  NUEVA_PUBLICACION_PENDIENTE: 'Moderación',
+  PUBLICACION_APROBADA_RECHAZADA: 'Moderación',
+  // Disputa.
+  DISPUTA_PENDIENTE_RESOLVER: 'Disputa',
+  DISPUTA_ABIERTA: 'Disputa',
+  DISPUTA_RESUELTA: 'Disputa',
+  // Advertencia.
+  RESPUESTA_USUARIO_PENDIENTE: 'Advertencia'
+};
+
+/**
+ * Clasifica un {@code tipo} de notificación en su categoría legible para el usuario final
+ * (PHA15TSK06).
+ *
+ * <p>Fallback declarado para tipos desconocidos (incluidos tipos futuros que el backend
+ * agregue sin aviso): la categoría {@code Otro}, que evita inventar una categoría de negocio
+ * sin autorización y garantiza que la fila siempre recibe una etiqueta renderizable. La
+ * clasificación es una función pura: el panel y su test comparten exactamente el mismo
+ * criterio, sin duplicar lógica en el render.</p>
+ *
+ * @param tipo categoría estable del aviso (contrato NotificacionResponseDto)
+ * @returns categoría legible entre las 6 de negocio, o "Otro" para tipos desconocidos
+ */
+export function categoriaNotificacion(tipo: string): CategoriaNotificacion {
+  return CATEGORIA_POR_TIPO[tipo] ?? 'Otro';
+}
+
+/**
+ * Carga la cantidad de notificaciones accionables no leídas del usuario autenticado desde el
+ * contrato real {@code GET /notificaciones/no-leidas/count} (PHA15TSK05) con la cookie
+ * httpOnly: {@code GET} puro, sin body ni parámetros (usuario y rol salen del JWT del backend,
+ * constitution principio 7). Es la fuente del badge numérico de la campana del header
+ * (PHA15TSK06).
+ *
+ * <p>Tratamiento de errores declarado: cualquier fallo (respuesta HTTP no-ok, cuerpo con forma
+ * inesperada o error de red) devuelve {@code null} en lugar de lanzar — el header debe seguir
+ * funcional sin badge ante un backend caído o una sesión expirada, y el fallo se registra en
+ * consola (log silencioso, sin UI de error en el header). La revalidación defensiva del cuerpo
+ * ({@code cantidad} numérico finito no negativo) protege al shell de un backend que cambie de
+ * contrato sin aviso.</p>
+ *
+ * @param url endpoint completo (base + '/notificaciones/no-leidas/count')
+ * @returns la cantidad de no leídas, o {@code null} si no pudo obtenerse (error o forma inválida)
+ */
+export async function cargarCantidadNoLeidas(url: string): Promise<number | null> {
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      console.error(`No se pudo obtener el contador de notificaciones (código ${response.status})`);
+      return null;
+    }
+
+    const data: unknown = await response.json();
+    if (typeof data === 'object' && data !== null && 'cantidad' in data) {
+      const candidata = (data as { cantidad: unknown }).cantidad;
+      if (typeof candidata === 'number' && Number.isFinite(candidata) && candidata >= 0) {
+        return candidata;
+      }
+    }
+    console.error('Respuesta del contador de notificaciones con formato inesperado');
+    return null;
+  } catch (error) {
+    console.error('Error de red al consultar el contador de notificaciones', error);
+    return null;
+  }
+}

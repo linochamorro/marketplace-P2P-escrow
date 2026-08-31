@@ -2,7 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import {
+  cargarCantidadNoLeidas,
+  EVENTO_NOTIFICACION_LEIDA
+} from './notificaciones-utils';
 import { cargarUsuarioActual, cerrarSesion, type UsuarioActualUI } from './sesion-utils';
 
 /**
@@ -42,6 +46,24 @@ import { cargarUsuarioActual, cerrarSesion, type UsuarioActualUI } from './sesio
  * contenido protegido ("sin dejar contenido protegido operativo"); ante fallo
  * (red o HTTP no-2xx) se conserva la sesión local, no se redirige y se muestra
  * un mensaje de error en la barra.
+ *
+ * Campana de notificaciones (PHA15TSK06): con sesión autenticada — para ADMIN
+ * y USUARIO — el header muestra un ícono de campana accesible
+ * (`aria-label="Ver notificaciones"`, envuelto en `next/link` a
+ * `/notificaciones`) con badge numérico del contador de no leídas obtenido de
+ * `GET /notificaciones/no-leidas/count` (endpoint autorizado de PHA15TSK05,
+ * con `credentials: 'include'` y sin parámetros). Comportamiento del badge:
+ * cantidad 0 → sin badge (estado cero sin "0" engañoso); error de red o HTTP
+ * → sin badge y header funcional (log silencioso en consola, sin UI de error).
+ * El contador se refresca al cargar la sesión, al recuperar el foco de la
+ * ventana (evento `focus` de `window`, el mismo mecanismo manual del panel)
+ * y al recibir el evento de ventana `easymarket:notificacion-leida` que el
+ * panel emite tras marcar un aviso como leída — mecanismo declarado de
+ * sincronización panel → header sin dependencias nuevas. La guarda de
+ * concurrencia (`conteoEnVueloRef`) evita fetches duplicados si varios
+ * disparos coinciden con una consulta en vuelo. El nombre accesible es
+ * "Ver notificaciones" y NO "Notificaciones" a propósito: colisionaría con el
+ * enlace del sidebar del mismo nombre (dos `getByRole` ambiguos).
  */
 
 /** Destinos de navegación visibles para el rol USUARIO (contrato PHA06TSK09). */
@@ -277,6 +299,20 @@ export default function Shell({ children, obtenerUsuarioActual = cargarUsuarioAc
   const [menuAbierto, setMenuAbierto] = useState<boolean>(false);
   /** Mensaje de error del logout (fallo de red o HTTP no-2xx); `null` sin error. */
   const [errorLogout, setErrorLogout] = useState<string | null>(null);
+  /**
+   * Cantidad de notificaciones accionables no leídas del badge de la campana
+   * (PHA15TSK06). `null` = sin dato aún o error del fetch (en ambos casos sin
+   * badge); `0` = estado cero, también sin badge.
+   */
+  const [cantidadNoLeidas, setCantidadNoLeidas] = useState<number | null>(null);
+  /** Guarda anti-duplicación del fetch del contador (una consulta en vuelo a la vez). */
+  const conteoEnVueloRef = useRef<boolean>(false);
+  /**
+   * Ref con la función de recarga del contador vigente, para que los listeners
+   * de `focus` y del evento de marca-leída (registrados una sola vez) invoquen
+   * siempre la última versión sin re-registrarse (mismo patrón del panel).
+   */
+  const recargarConteoRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     if (!conShell) {
@@ -306,6 +342,55 @@ export default function Shell({ children, obtenerUsuarioActual = cargarUsuarioAc
       router.replace('/auth');
     }
   }, [estado, router]);
+
+  /**
+   * Contador de la campana (PHA15TSK06): consulta `GET
+   * /notificaciones/no-leidas/count` al entrar en estado autenticado, y lo
+   * refresca al recuperar el foco de la ventana y al recibir el evento
+   * `easymarket:notificacion-leida` del panel. La guarda de concurrencia
+   * deduplica disparos simultáneos; los listeners se registran una sola vez y
+   * se limpian al salir del estado (logout) para no tocar un shell desmontado.
+   */
+  useEffect(() => {
+    if (estado !== 'autenticado') {
+      return;
+    }
+    let activo = true;
+    const url = `${process.env.NEXT_PUBLIC_API_URL ?? ''}/notificaciones/no-leidas/count`;
+
+    const recargar = async () => {
+      if (conteoEnVueloRef.current) {
+        return;
+      }
+      conteoEnVueloRef.current = true;
+      try {
+        const cantidad = await cargarCantidadNoLeidas(url);
+        if (activo) {
+          // `null` (error/sin dato) también se guarda: el badge desaparece y el
+          // header queda funcional (tratamiento de errores declarado).
+          setCantidadNoLeidas(cantidad);
+        }
+      } finally {
+        conteoEnVueloRef.current = false;
+      }
+    };
+    recargarConteoRef.current = recargar;
+    void recargar();
+
+    const alFocoVentana = () => {
+      void recargarConteoRef.current();
+    };
+    const alNotificacionLeida = () => {
+      void recargarConteoRef.current();
+    };
+    window.addEventListener('focus', alFocoVentana);
+    window.addEventListener(EVENTO_NOTIFICACION_LEIDA, alNotificacionLeida);
+    return () => {
+      activo = false;
+      window.removeEventListener('focus', alFocoVentana);
+      window.removeEventListener(EVENTO_NOTIFICACION_LEIDA, alNotificacionLeida);
+    };
+  }, [estado]);
 
   // Cierra el sidebar cuando el usuario presiona la tecla Escape
   useEffect(() => {
@@ -415,6 +500,25 @@ export default function Shell({ children, obtenerUsuarioActual = cargarUsuarioAc
           <div className="flex items-center gap-3">
             {estado === 'autenticado' ? (
               <div className="flex items-center gap-2">
+                {/* Campana de notificaciones (PHA15TSK06): ícono accesible enlazado a
+                    /notificaciones con badge numérico solo cuando hay no leídas (cantidad 0 o
+                    error → sin badge). El número es aria-hidden para que el nombre accesible
+                    ("Ver notificaciones") no fluctúe con el contador. */}
+                <Link
+                  href="/notificaciones"
+                  aria-label="Ver notificaciones"
+                  className="relative flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-slate-400"
+                >
+                  <IconoDestino etiqueta="Notificaciones" />
+                  {cantidadNoLeidas !== null && cantidadNoLeidas > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-xs bg-[#0F172A] px-1 text-[10px] font-semibold leading-none text-white"
+                    >
+                      {cantidadNoLeidas}
+                    </span>
+                  )}
+                </Link>
                 <span className="hidden sm:inline-flex items-center rounded-xs bg-slate-100 px-2.5 py-1 text-xs font-mono text-slate-600 border border-slate-200">
                   {usuario?.email}
                 </span>

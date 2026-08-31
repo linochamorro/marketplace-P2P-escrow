@@ -61,24 +61,27 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * la cookie {@code jwt} obtenida por HTTP autentica cada petición. Verifica el contrato vigente:</p>
  * <ul>
  *   <li>{@code GET /notificaciones} delega en
- *       {@code NotificacionService.listarPorUsuarioYRol}: devuelve SOLO las notificaciones del
- *       usuario autenticado cuyo {@code tipo} pertenece a la lista de su rol en el JWT (ADMIN:
- *       moderación/disputas; USER: compra/venta/envío/disputa), aislamiento por destinatario,
- *       mapeo campo a campo del DTO contra el valor persistido y orden descendente con desempate
- *       por ID.</li>
+ *       {@code NotificacionService.listarPorUsuarioYRol}: devuelve las notificaciones del
+ *       usuario autenticado cuyo {@code tipo} pertenece a la lista VISIBLE de su rol en el JWT
+ *       (desde PHA15TSK06, decisión de Lino 2026-08-30, el listado es un SUPERCONJUNTO del
+ *       badge: ADMIN ve moderación/disputas MÁS {@code NUEVA_PUBLICACION_PENDIENTE}; USER ve
+ *       compra/venta/envío/disputa MÁS los recordatorios periódicos
+ *       {@code COMPRA_PENDIENTE_DIARIA}, {@code VENTA_POR_ENTREGAR_DIARIA} y
+ *       {@code ENVIO_PENDIENTE_48H}), aislamiento por destinatario, mapeo campo a campo del DTO
+ *       contra el valor persistido y orden descendente con desempate por ID.</li>
  *   <li>{@code PATCH /notificaciones/{id}/leer} marca {@code leida=true} de forma idempotente
  *       (segunda llamada retorna la misma entidad), 404 si la notificación no existe, 403 si el
  *       autenticado no es su destinatario.</li>
  *   <li>{@code GET /notificaciones/no-leidas/count} (PHA15TSK05) devuelve {@code {"cantidad": N}}
  *       contando EXCLUSIVAMENTE las notificaciones accionables del rol del JWT con
- *       {@code leida=false}: el mismo criterio por rol de {@code listarPorUsuarioYRol} (ADMIN:
- *       moderación/disputas; USER: compra/venta/envío/disputa). Los avisos diarios y periódicos
+ *       {@code leida=false}: el MISMO criterio accionable por rol del badge (ADMIN:
+ *       moderación/disputas; USER: compra/venta/envío/disputa), un SUBCONJUNTO del listado
+ *       visible desde PHA15TSK06. Los avisos diarios y periódicos
  *       ({@code COMPRA_PENDIENTE_DIARIA}, {@code VENTA_POR_ENTREGAR_DIARIA},
- *       {@code ENVIO_PENDIENTE_48H}) quedan fuera del set accionable (plan.md §Notificaciones,
- *       fila "Unicidad por elemento pendiente": conservan historial propio, no son slots de
- *       elemento pendiente). No acepta ni lee parámetro alguno del cliente: usuario y rol salen
- *       del JWT (constitution, principio 7). Marcar una notificación como leída con el PATCH
- *       existente actualiza el conteo.</li>
+ *       {@code ENVIO_PENDIENTE_48H}) no inflan el contador (plan.md §Notificaciones, fila
+ *       "Visibilidad del panel (listado vs badge)"). No acepta ni lee parámetro alguno del
+ *       cliente: usuario y rol salen del JWT (constitution, principio 7). Marcar una
+ *       notificación como leída con el PATCH existente actualiza el conteo.</li>
  * </ul>
  *
  * <p>Los tipos sembrados son todos válidos frente al CHECK {@code chk_notificaciones_tipo_valido}
@@ -302,52 +305,78 @@ class NotificacionControllerIntegrationTests {
     }
 
     /**
-     * Verifica el filtro por rol de la story PHA09TSK05 (recuperado en PHA12TSK04) para el rol
-     * USER: {@code GET /notificaciones} devuelve SOLO las notificaciones cuyo tipo pertenece a la
-     * lista del rol del JWT (compra/venta/envío/disputa) y excluye tipos válidos en base de datos
-     * pero ajenos a esa lista.
+     * Verifica el criterio de visibilidad del panel (PHA15TSK06, plan.md §Notificaciones fila
+     * "Visibilidad del panel (listado vs badge)", decisión de Lino 2026-08-30) para el rol
+     * USER: {@code GET /notificaciones} devuelve un SUPERCONJUNTO del badge — los 7 tipos
+     * accionables del rol MÁS los 3 recordatorios periódicos del propio rol
+     * ({@code COMPRA_PENDIENTE_DIARIA}, {@code VENTA_POR_ENTREGAR_DIARIA},
+     * {@code ENVIO_PENDIENTE_48H}) — y excluye los tipos del OTRO rol.
      *
-     * <p>Se siembran para A una notificación visible ({@code COMPRA_CONFIRMADA}) y tres fuera de
-     * la lista USER pero válidas frente al CHECK de V19 ({@code AVISO_TRANSACCION_ABIERTA},
-     * {@code ENVIO_PENDIENTE_48H} y {@code NUEVA_PUBLICACION_PENDIENTE}); la respuesta debe
-     * contener únicamente la visible aunque todas sean del propio destinatario.</p>
+     * <p>Este test reemplaza al de PHA12TSK04 que afirmaba la exclusión de los recordatorios
+     * periódicos del listado: los tipos del MISMO rol ahora SÍ aparecen; los del otro rol
+     * ({@code NUEVA_PUBLICACION_PENDIENTE}, tipo ADMIN) y los sin rol
+     * ({@code AVISO_TRANSACCION_ABIERTA}) siguen excluidos.</p>
+     *
+     * <p>Se siembran para A cuatro notificaciones visibles (una accionable y los tres
+     * recordatorios periódicos, todos válidos frente al CHECK de V19) y dos fuera del rol
+     * ({@code NUEVA_PUBLICACION_PENDIENTE} y {@code AVISO_TRANSACCION_ABIERTA}); la respuesta
+     * debe contener las cuatro visibles aunque todas sean del propio destinatario.</p>
      *
      * @throws Exception si falla la interacción HTTP
      */
     @Test
-    @DisplayName("GET /notificaciones como USER excluye tipos válidos que no pertenecen a su rol")
-    void obtener_UsuarioTiposFueraDeSuRol_NoAparecenEnRespuesta() throws Exception {
-        Notificacion visible = notificacionRepository.save(
+    @DisplayName("GET /notificaciones como USER ve accionables y recordatorios de su rol, excluye los del rol ADMIN")
+    void obtener_UsuarioVeAccionablesYRecordatoriosDeSuRol_ExcluyeLosDelOtroRol() throws Exception {
+        Notificacion visibleAccionable = notificacionRepository.save(
                 new Notificacion(usuarioA, "Tu compra fue confirmada", "COMPRA_CONFIRMADA", ahora()));
-        Notificacion ajena1 = notificacionRepository.save(
-                new Notificacion(usuarioA, "Tu transacción sigue abierta", "AVISO_TRANSACCION_ABIERTA", ahora()));
-        Notificacion ajena2 = notificacionRepository.save(
+        Notificacion visibleRecordatorio1 = notificacionRepository.save(
+                new Notificacion(usuarioA, "Tu compra sigue pendiente", "COMPRA_PENDIENTE_DIARIA", ahora()));
+        Notificacion visibleRecordatorio2 = notificacionRepository.save(
+                new Notificacion(usuarioA, "Tu venta sigue por entregar", "VENTA_POR_ENTREGAR_DIARIA", ahora()));
+        Notificacion visibleRecordatorio3 = notificacionRepository.save(
                 new Notificacion(usuarioA, "Tu envío sigue pendiente", "ENVIO_PENDIENTE_48H", ahora()));
-        Notificacion ajena3 = notificacionRepository.save(
+        Notificacion ajenaRolAdmin = notificacionRepository.save(
                 new Notificacion(usuarioA, "Nueva publicación pendiente", "NUEVA_PUBLICACION_PENDIENTE", ahora()));
+        Notificacion ajenaSinRol = notificacionRepository.save(
+                new Notificacion(usuarioA, "Tu transacción sigue abierta", "AVISO_TRANSACCION_ABIERTA", ahora()));
 
         Cookie cookieUsuarioA = obtenerCookieJwtPostLogin(usuarioA);
 
         MvcResult result = mockMvc.perform(get("/notificaciones").cookie(cookieUsuarioA))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$.length()").value(4))
                 .andReturn();
 
         List<Map<String, Object>> items = leerItems(result);
 
-        assertThat(((Number) items.get(0).get("id")).longValue()).isEqualTo(visible.getId());
+        assertThat(items)
+                .extracting(item -> ((Number) item.get("id")).longValue())
+                .containsExactlyInAnyOrder(
+                        visibleAccionable.getId(),
+                        visibleRecordatorio1.getId(),
+                        visibleRecordatorio2.getId(),
+                        visibleRecordatorio3.getId())
+                .doesNotContain(ajenaRolAdmin.getId(), ajenaSinRol.getId());
 
-        // Sanidad: las excluidas existen en BD y pertenecen al propio A; su ausencia es del filtro por rol
+        // Sanidad: las excluidas existen en BD y pertenecen al propio A; su ausencia es del
+        // filtro por rol (tipos del rol ADMIN y tipo sin rol), no del aislamiento por destinatario.
         assertThat(notificacionRepository.findAll())
                 .extracting(Notificacion::getId)
-                .contains(visible.getId(), ajena1.getId(), ajena2.getId(), ajena3.getId());
+                .contains(visibleAccionable.getId(), visibleRecordatorio1.getId(), visibleRecordatorio2.getId(),
+                        visibleRecordatorio3.getId(), ajenaRolAdmin.getId(), ajenaSinRol.getId());
     }
 
     /**
-     * Verifica el filtro por rol para el rol ADMIN: {@code GET /notificaciones} autenticado como
-     * el administrador devuelve SOLO los tipos de moderación/disputas
-     * ({@code PUBLICACION_PENDIENTE_APROBAR}, {@code DISPUTA_PENDIENTE_RESOLVER}) y excluye los
-     * tipos de compra/venta/envío/disputa y los avisos diarios.
+     * Verifica el criterio de visibilidad del panel (PHA15TSK06, plan.md §Notificaciones fila
+     * "Visibilidad del panel (listado vs badge)", decisión de Lino 2026-08-30) para el rol
+     * ADMIN: {@code GET /notificaciones} devuelve los 2 tipos accionables del rol (moderación y
+     * disputas) MÁS {@code NUEVA_PUBLICACION_PENDIENTE} (superconjunto del badge), y excluye
+     * los tipos del rol USER (accionables y recordatorios periódicos) y los sin rol.
+     *
+     * <p>Este test reemplaza al de PHA12TSK04 que afirmaba un listado exclusivo de
+     * moderación/disputas: {@code NUEVA_PUBLICACION_PENDIENTE} del MISMO rol ahora SÍ aparece;
+     * los tipos del rol USER ({@code COMPRA_CONFIRMADA}, {@code COMPRA_PENDIENTE_DIARIA}) y el
+     * tipo sin rol ({@code AVISO_TRANSACCION_ABIERTA}) siguen excluidos.</p>
      *
      * <p>Política única de fixtures ADMIN (PHA12TSK06): este escenario NO crea ninguna fila ADMIN.
      * {@link #prepararEscenarioAdminUnico()} limpia las tablas con dependencias de FK conservando
@@ -360,41 +389,49 @@ class NotificacionControllerIntegrationTests {
      * @throws Exception si falla la interacción HTTP o la preparación del escenario
      */
     @Test
-    @DisplayName("GET /notificaciones como ADMIN devuelve solo moderación/disputas de su rol")
-    void obtener_AdminVeSoloModeracionYDisputas_Retorna200FiltradasPorRol() throws Exception {
+    @DisplayName("GET /notificaciones como ADMIN ve moderación, disputas y nueva publicación, excluye los del rol USER")
+    void obtener_AdminVeModeracionDisputasYNuevaPublicacion_ExcluyeLosDelRolUsuario() throws Exception {
         prepararEscenarioAdminUnico();
         Usuario admin = obtenerAdminUnico();
 
-        ZonedDateTime tAntigua = ahora().minusMinutes(2L);
+        ZonedDateTime tAntigua = ahora().minusMinutes(4L);
+        ZonedDateTime tMedia = ahora().minusMinutes(2L);
         ZonedDateTime tReciente = ahora().minusMinutes(1L);
         Notificacion moderacion = notificacionRepository.save(
                 new Notificacion(admin, "Publicación pendiente de aprobar", "PUBLICACION_PENDIENTE_APROBAR", tAntigua));
+        Notificacion nuevaPublicacion = notificacionRepository.save(
+                new Notificacion(admin, "Nueva publicación pendiente de revisión", "NUEVA_PUBLICACION_PENDIENTE", tMedia));
         Notificacion disputa = notificacionRepository.save(
                 new Notificacion(admin, "Disputa pendiente de resolver", "DISPUTA_PENDIENTE_RESOLVER", tReciente));
-        Notificacion ajena1 = notificacionRepository.save(
+        Notificacion ajenaTipoUsuario = notificacionRepository.save(
                 new Notificacion(admin, "Compra confirmada fuera del rol ADMIN", "COMPRA_CONFIRMADA", ahora()));
-        Notificacion ajena2 = notificacionRepository.save(
+        Notificacion ajenaRecordatorioUsuario = notificacionRepository.save(
+                new Notificacion(admin, "Recordatorio diario fuera del rol ADMIN", "COMPRA_PENDIENTE_DIARIA", ahora()));
+        Notificacion ajenaSinRol = notificacionRepository.save(
                 new Notificacion(admin, "Aviso diario fuera del rol ADMIN", "AVISO_TRANSACCION_ABIERTA", ahora()));
 
         Cookie cookieAdmin = obtenerCookieJwtPostLogin(admin);
 
         MvcResult result = mockMvc.perform(get("/notificaciones").cookie(cookieAdmin))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$.length()").value(3))
                 .andReturn();
 
         List<Map<String, Object>> items = leerItems(result);
 
-        // Orden descendente: la disputa (más reciente) primero
+        // Orden descendente: disputa (tReciente), nueva publicación (tMedia), moderación (tAntigua)
         assertThat(((Number) items.get(0).get("id")).longValue()).isEqualTo(disputa.getId());
         assertThat(items.get(0).get("tipo")).isEqualTo("DISPUTA_PENDIENTE_RESOLVER");
-        assertThat(((Number) items.get(1).get("id")).longValue()).isEqualTo(moderacion.getId());
-        assertThat(items.get(1).get("tipo")).isEqualTo("PUBLICACION_PENDIENTE_APROBAR");
+        assertThat(((Number) items.get(1).get("id")).longValue()).isEqualTo(nuevaPublicacion.getId());
+        assertThat(items.get(1).get("tipo")).isEqualTo("NUEVA_PUBLICACION_PENDIENTE");
+        assertThat(((Number) items.get(2).get("id")).longValue()).isEqualTo(moderacion.getId());
+        assertThat(items.get(2).get("tipo")).isEqualTo("PUBLICACION_PENDIENTE_APROBAR");
 
         // Sanidad: las excluidas existen en BD y pertenecen al propio admin
         assertThat(notificacionRepository.findAll())
                 .extracting(Notificacion::getId)
-                .contains(moderacion.getId(), disputa.getId(), ajena1.getId(), ajena2.getId());
+                .contains(moderacion.getId(), disputa.getId(), nuevaPublicacion.getId(),
+                        ajenaTipoUsuario.getId(), ajenaRecordatorioUsuario.getId(), ajenaSinRol.getId());
     }
 
     /**

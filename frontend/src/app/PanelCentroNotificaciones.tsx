@@ -3,9 +3,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  categoriaNotificacion,
   cargarNotificaciones,
   ErrorApiNotificaciones,
   etiquetaTipo,
+  EVENTO_NOTIFICACION_LEIDA,
   formatearFechaNotificacion,
   marcarComoLeida,
   rutaDestino,
@@ -17,6 +19,7 @@ import {
 export type { NotificacionUI };
 export {
   ETIQUETAS_TIPO,
+  categoriaNotificacion,
   etiquetaTipo,
   formatearFechaNotificacion,
   ErrorApiNotificaciones,
@@ -58,7 +61,18 @@ export interface PanelCentroNotificacionesProps {
  *
  * <p>Cada fila sin leer ofrece además el botón "Marcar como leída", que hace
  * {@code event.stopPropagation()} (decisión 5: evita que el click burbujee al contenedor
- * navegable) y ejecuta únicamente el PATCH con actualización local, sin navegación.</p>
+ * navegable) y ejecuta únicamente el PATCH con actualización local, sin navegación. Tras un
+ * PATCH exitoso — por fila navegable o por botón — el panel emite una sola vez el evento de
+ * ventana {@code easymarket:notificacion-leida} (contracto compartido en
+ * {@code EVENTO_NOTIFICACION_LEIDA}) para que la campana del {@code Shell} refresque su
+ * contador de no leídas (PHA15TSK06); ante un PATCH fallido el evento NO se emite.</p>
+ *
+ * <p>Identificación visual por categoría (PHA15TSK06): cada fila renderiza una etiqueta
+ * discreta con la categoría legible derivada del tipo estable mediante
+ * {@link categoriaNotificacion} — compra nueva, estado de compra/envío, recordatorio periódico,
+ * moderación, disputa o advertencia, con fallback "Otro" para tipos desconocidos. El estilo es
+ * {@code label-caps} con borde y fondo slate de DESIGN.md (status badges de 4px, no pill),
+ * coherente con la estética data-centric, y no altera la navegación ni el botón existentes.</p>
  *
  * <p>Errores del PATCH (403/404/red): se reportan en el MISMO banner de error que ya usa la
  * carga inicial ({@code errorMensaje}), con el {@code mensaje} literal del backend cuando lo
@@ -194,6 +208,10 @@ export default function PanelCentroNotificaciones({
         una.id === notificacion.id ? { ...una, leida: true } : una
       )
     );
+    // Sincronización panel → header (PHA15TSK06): el PATCH fue 200 y el estado local quedó
+    // actualizado; se emite el evento de ventana para que la campana del Shell refresque su
+    // contador de no leídas. Solo en éxito: un PATCH fallido no debe mover el badge del header.
+    window.dispatchEvent(new Event(EVENTO_NOTIFICACION_LEIDA));
     return true;
   }
 
@@ -304,6 +322,13 @@ export default function PanelCentroNotificaciones({
                         {etiquetaTipo(notificacion.tipo)}
                       </p>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                        {/* Categoría legible derivada del tipo estable (PHA15TSK06): etiqueta
+                            discreta label-caps de DESIGN.md (badge 4px, no pill). */}
+                        <span
+                          className="label-caps inline-flex items-center rounded-xs border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500"
+                        >
+                          {categoriaNotificacion(notificacion.tipo)}
+                        </span>
                         <span className="font-mono">{formatearFechaNotificacion(notificacion.createdAt)}</span>
                         {notificacion.transaccionId !== null && (
                           <span className="font-mono">Transacción #{notificacion.transaccionId}</span>
