@@ -6,6 +6,7 @@ import com.easymarket.marketplace.model.Publicacion;
  * DTO de respuesta HTTP para la exposición de publicaciones en el API (Story 1, spec.md).
  *
  * @param id identificador único de la publicación
+ * @param codigoProducto código de negocio autogenerado por el Sistema en formato {YYYY}{PREF}{NNNNN} (PHA15TSK13)
  * @param precio monto en centavos de moneda entera
  * @param stock unidades disponibles
  * @param estado estado actual en el ciclo de vida de la publicación (ej. "PENDIENTE_REVISION")
@@ -18,6 +19,7 @@ import com.easymarket.marketplace.model.Publicacion;
  */
 public record PublicacionResponseDto(
         Long id,
+        String codigoProducto,
         Long precio,
         Integer stock,
         String estado,
@@ -37,6 +39,7 @@ public record PublicacionResponseDto(
     public static PublicacionResponseDto fromEntity(Publicacion publicacion) {
         return new PublicacionResponseDto(
                 publicacion.getId(),
+                publicacion.getCodigoProducto(),
                 publicacion.getPrecio(),
                 publicacion.getStock(),
                 publicacion.getEstado().name(),

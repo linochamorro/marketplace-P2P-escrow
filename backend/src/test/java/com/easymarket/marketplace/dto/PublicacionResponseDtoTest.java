@@ -15,15 +15,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Prueba unitaria del mapeo {@link PublicacionResponseDto#fromEntity}.
+
+ * <p>Incluye la verificación del {@code codigoProducto} expuesto en el DTO (PHA15TSK13).</p>
  */
 class PublicacionResponseDtoTest {
 
     /**
      * Verifica que {@link PublicacionResponseDto#fromEntity} mapea el nombre de archivo
-     * de imagen de la entidad al DTO.
+     * de imagen de la entidad y el {@code codigoProducto} (PHA15TSK13) al DTO.
      */
     @Test
-    @DisplayName("fromEntity mapea el nombre de archivo de imagen de la publicación")
+    @DisplayName("fromEntity mapea el nombre de archivo de imagen y el codigoProducto de la publicación")
     void fromEntityMapeaNombreArchivoImagen() {
         Categoria categoria = new Categoria("Electrónica");
         categoria.setId(1L);
@@ -42,10 +44,12 @@ class PublicacionResponseDtoTest {
         publicacion.setId(7L);
         publicacion.setEstado(EstadoPublicacion.APROBADA);
         publicacion.setImagenFilename("auriculares-bluetooth.jpg");
+        publicacion.setCodigoProducto("2026ELE00001");
 
         PublicacionResponseDto dto = PublicacionResponseDto.fromEntity(publicacion);
 
         assertThat(dto.id()).isEqualTo(7L);
+        assertThat(dto.codigoProducto()).isEqualTo("2026ELE00001");
         assertThat(dto.usuarioEmail()).isEqualTo("vendedor@easymarket.dev");
         assertThat(dto.imagenFilename()).isEqualTo("auriculares-bluetooth.jpg");
     }

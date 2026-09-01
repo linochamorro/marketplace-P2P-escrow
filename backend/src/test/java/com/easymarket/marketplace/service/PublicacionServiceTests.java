@@ -28,6 +28,7 @@ import com.easymarket.marketplace.repository.SubcategoriaRepository;
 import com.easymarket.marketplace.repository.TransaccionRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
 import com.easymarket.marketplace.service.NotificacionService;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -105,6 +106,10 @@ class PublicacionServiceTests {
 
     @Mock
     private TransaccionRepository transaccionRepository;
+
+    /** Mock del {@link EntityManager}: en la unidad no hay lectura real del trigger de V22 (PHA15TSK13). */
+    @Mock
+    private EntityManager entityManager;
 
     @InjectMocks
     private PublicacionService publicacionService;

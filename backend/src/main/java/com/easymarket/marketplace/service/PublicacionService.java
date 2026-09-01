@@ -30,6 +30,7 @@ import com.easymarket.marketplace.repository.SubcategoriaRepository;
 import com.easymarket.marketplace.repository.TransaccionRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
 import com.easymarket.marketplace.service.NotificacionService;
+import jakarta.persistence.EntityManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -66,9 +67,10 @@ public class PublicacionService {
     private final NotificacionRepository notificacionRepository;
     private final NotificacionService notificacionService;
     private final TransaccionRepository transaccionRepository;
+    private final EntityManager entityManager;
 
     /**
-     * Construye el servicio inyectando los repositorios necesarios.
+     * Construye el servicio inyectando los repositorios necesarios y el {@link EntityManager}.
      *
      * @param publicacionRepository repositorio JPA de publicaciones
      * @param usuarioRepository repositorio JPA de usuarios
@@ -80,6 +82,9 @@ public class PublicacionService {
      * @param notificacionService servicio de dominio para notificaciones accionables (PHA09TSK05)
      * @param transaccionRepository repositorio JPA de transacciones, usado para rechazar la eliminación
      *        de publicaciones con transacciones asociadas (PHA12TSK01)
+     * @param entityManager gestor de entidades JPA, usado para releer la entidad recién guardada y
+     *        obtener el {@code codigoProducto} que el trigger de la migración V22 asigna en base de datos
+     *        (PHA15TSK13)
      */
     public PublicacionService(PublicacionRepository publicacionRepository,
                                UsuarioRepository usuarioRepository,
@@ -89,7 +94,8 @@ public class PublicacionService {
                                PublicacionMotivoHistoricoRepository publicacionMotivoHistoricoRepository,
                                NotificacionRepository notificacionRepository,
                                NotificacionService notificacionService,
-                               TransaccionRepository transaccionRepository) {
+                               TransaccionRepository transaccionRepository,
+                               EntityManager entityManager) {
         this.publicacionRepository = publicacionRepository;
         this.usuarioRepository = usuarioRepository;
         this.categoriaRepository = categoriaRepository;
@@ -99,6 +105,7 @@ public class PublicacionService {
         this.notificacionRepository = notificacionRepository;
         this.notificacionService = notificacionService;
         this.transaccionRepository = transaccionRepository;
+        this.entityManager = entityManager;
     }
 
     /**
@@ -111,7 +118,9 @@ public class PublicacionService {
      * @param stock cantidad inicial disponible (entero >= 1)
      * @param descripcion descripción del producto
      * @param imagenFilename nombre de archivo de imagen opcional (sin prefijo de URL)
-     * @return la entidad {@link Publicacion} creada y persistida con estado 'pendiente_revisión'
+     * @return la entidad {@link Publicacion} creada y persistida con estado 'pendiente_revisión' y
+     *         con su {@code codigoProducto} poblado (PHA15TSK13: el trigger de V22 lo asigna en la
+     *         base de datos y el servicio relee la instancia para que la devuelta lo traiga)
      * @throws PrecioInvalidoException si precio <= 0
      * @throws StockInvalidoException si stock < 1
      * @throws UsuarioNoEncontradoException si el usuario no existe
@@ -148,6 +157,11 @@ public class PublicacionService {
             publicacion.setImagenFilename(imagenFilename);
         }
         Publicacion guardada = publicacionRepository.save(publicacion);
+        // El trigger de la migración V22 asigna codigo_producto en DB durante el INSERT; la instancia
+        // gestionada queda con el campo en null (primera caché). Se relee para que la entidad devuelta
+        // traiga el código poblado (PHA15TSK13) — saveAndFlush + findById NO basta porque findById
+        // devuelve la MISMA instancia gestionada en caché (ver Artifact, decisiones no triviales).
+        entityManager.refresh(guardada);
         ZonedDateTime ahora = ZonedDateTime.now();
         publicacionEventoRepository.save(new PublicacionEvento(guardada, usuario, ahora));
         notificacionService.crearNotificacionAdmin(

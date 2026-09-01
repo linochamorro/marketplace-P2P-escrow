@@ -67,6 +67,18 @@ class MarketplaceApplicationTests {
     @MockitoBean
     private com.easymarket.marketplace.repository.PublicacionRepository publicacionRepository;
 
+    /**
+     * Mock del gestor de entidades JPA requerido por {@code PublicacionService} para releer la
+     * {@code codigoProducto} que el trigger de la migración V22 asigna en base de datos tras el
+     * {@code save()} (PHA15TSK13).
+     *
+     * <p>El perfil {@code test} deshabilita la autoconfiguración de JPA, de modo que no existe un
+     * {@code EntityManager} real en este contexto; se mockea para permitir la carga del contexto
+     * del smoke test (mismo patrón que los repositorios mockeados).</p>
+     */
+    @MockitoBean
+    private jakarta.persistence.EntityManager entityManager;
+
     /** Mock required by the PHA06 publication-creation audit dependency. */
     @MockitoBean
     private PublicacionEventoRepository publicacionEventoRepository;

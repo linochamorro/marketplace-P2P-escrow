@@ -265,6 +265,7 @@ public class PublicacionControllerIntegrationTests {
                         ))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.codigoProducto").exists())
                 .andExpect(jsonPath("$.precio").value(2500000L))
                 .andExpect(jsonPath("$.stock").value(3))
                 .andExpect(jsonPath("$.estado").value("PENDIENTE_REVISION"))

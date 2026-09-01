@@ -27,6 +27,23 @@ public class Publicacion {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * Código de negocio autogenerado por el Sistema en formato {@code {YYYY}{PREF}{NNNNN}}
+     * (ej. {@code 2026ELE00001}), distinto del {@code id} IDENTITY interno (PHA15TSK13).
+     *
+     * <p>La columna {@code codigo_producto} es {@code VARCHAR(20) NOT NULL UNIQUE} (migración V22) y
+     * es <strong>propiedad exclusiva de la base de datos</strong>: el trigger
+     * {@code tg_publicaciones_codigo_producto} ({@code BEFORE INSERT}) la genera cuando
+     * {@code NEW.codigo_producto IS NULL}. Por eso el campo se mapea como de <strong>solo lectura</strong>
+     * ({@code insertable = false, updatable = false}): la aplicación jamás la escribe ni en INSERT ni en
+     * UPDATE, lo que evita que Hibernate inyecte {@code null} en la columna (la instancia gestionada
+     * recién persistida puede quedar con este campo en {@code null} hasta que se relee desde la base de
+     * datos, mecanismo de refresh del servicio de creación). La lectura ({@code SELECT}/{@code refresh})
+     * sí la trae a la entidad.</p>
+     */
+    @Column(name = "codigo_producto", insertable = false, updatable = false, length = 20)
+    private String codigoProducto;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "usuario_id", nullable = false)
     private Usuario usuario;
@@ -123,6 +140,31 @@ public class Publicacion {
      */
     public void setId(Long id) {
         this.id = id;
+    }
+
+    /**
+     * Obtiene el código de negocio autogenerado por el Sistema (PHA15TSK13).
+     *
+     * @return código de producto en formato {@code {YYYY}{PREF}{NNNNN}}, o {@code null} si la entidad
+     *         aún no fue releída desde la base de datos (el valor lo asigna el trigger de la migración V22)
+     */
+    public String getCodigoProducto() {
+        return codigoProducto;
+    }
+
+    /**
+     * Establece el código de negocio autogenerado por el Sistema (PHA15TSK13).
+     *
+     * <p>La columna {@code codigo_producto} es de <strong>solo lectura</strong> para la aplicación
+     * ({@code insertable = false, updatable = false}): el valor NO se genera en Java, es exclusivo del
+     * trigger {@code tg_publicaciones_codigo_producto} (plan.md, PHA15). Este setter existe por el
+     * contrato de entidad JPA y para el mecanismo de refresco ({@code entityManager.refresh}) del
+     * servicio de creación; la aplicación no debe setear el código al persistir.</p>
+     *
+     * @param codigoProducto código de producto en formato {@code {YYYY}{PREF}{NNNNN}}
+     */
+    public void setCodigoProducto(String codigoProducto) {
+        this.codigoProducto = codigoProducto;
     }
 
     /**

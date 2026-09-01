@@ -13,6 +13,7 @@ import com.easymarket.marketplace.repository.PublicacionEventoRepository;
 import com.easymarket.marketplace.repository.PublicacionRepository;
 import com.easymarket.marketplace.repository.SubcategoriaRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -60,6 +61,8 @@ class PublicacionCreacionAuditoriaTests {
     @Mock private NotificacionService notificacionService;
     /** Repositorio del histórico append-only de motivos de moderación (dependencia del constructor). */
     @Mock private com.easymarket.marketplace.repository.PublicacionMotivoHistoricoRepository publicacionMotivoHistoricoRepository;
+    /** Gestor de entidades JPA: en la unidad la releída post-guardado del trigger de V22 se invoca como no-op (PHA15TSK13). */
+    @Mock private EntityManager entityManager;
     /** Servicio bajo prueba. */
     @InjectMocks private PublicacionService publicacionService;
 
