@@ -97,7 +97,7 @@ docker compose up -d postgres
 # 2. Backend con perfil dev (por defecto), con las variables del .env raíz
 cd backend
 # PowerShell: cargar el .env raíz en el entorno del proceso antes de arrancar
-Get-Content .env | ForEach-Object {
+Get-Content ..\.env | ForEach-Object {
   if ($_ -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
     [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
   }
