@@ -187,7 +187,13 @@ describe('PHA06TSK13 - rutas administrativas reales', () => {
     renderRuta(ruta, Pagina);
 
     expect(await screen.findByText(/no tienes permisos para acceder a esta sección/i)).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // PHA15TSK07-L02: el fetch del contador de la campana (PHA15TSK06) se despacha en los
+    // efectos pasivos del mismo commit que revela el mensaje de denegación — una aserción
+    // inmediata de conteo pierde la carrera contra ese despacho (fallo observado:
+    // "expected to be called 2 times, but got 1 times"). waitFor espera a que ambas llamadas
+    // (identidad + contador) existan; el conteo se estabiliza en 2 porque el shell no vuelve
+    // a consultar el contador (sin evento focus de ventana ni evento del panel en jsdom).
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(fetchMock).toHaveBeenCalledWith(`${BASE}/usuarios/me`, { method: 'GET', credentials: 'include' });
     // La única llamada adicional del shell es el contador de la campana (PHA15TSK06).
     expect(fetchMock).toHaveBeenCalledWith(`${BASE}/notificaciones/no-leidas/count`, { method: 'GET', credentials: 'include' });
