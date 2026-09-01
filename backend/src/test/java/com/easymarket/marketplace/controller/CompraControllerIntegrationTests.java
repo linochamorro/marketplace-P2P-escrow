@@ -9,6 +9,7 @@ import com.easymarket.marketplace.model.Subcategoria;
 import com.easymarket.marketplace.model.Usuario;
 import com.easymarket.marketplace.repository.CategoriaRepository;
 import com.easymarket.marketplace.repository.IdempotencyKeyRepository;
+import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.PublicacionRepository;
 import com.easymarket.marketplace.repository.SubcategoriaRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
@@ -63,6 +64,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * usado en el proyecto) para devolver un PaymentIntent falso con patrón {@code pi_...}. Los casos
  * de auto-compra (409) y stock agotado (422) fallan en la validación de dominio
  * ({@code ValidacionCompraService}) ANTES de alcanzar Stripe, por lo que no requieren stubbing.</p>
+ *
+ * <p><strong>Orden de limpieza del {@code setUp} (hardening preventivo PHA15TSK09, decisión de
+ * plan.md 2026-08-31, patrón PHA15TSK04-L07):</strong> las filas de {@code notificaciones} se
+ * eliminan PRIMERO porque referencian a {@code transacciones}
+ * ({@code fk_notificaciones_transaccion}, migración V14), a {@code publicaciones}
+ * ({@code fk_notificaciones_publicacion}, migración V20) y a {@code usuarios}
+ * ({@code fk_notificaciones_usuario}, migración V9), y ninguna otra tabla las referencia.
+ * Hardening preventivo: hoy ningún escenario de esta clase genera notificaciones, pero el orden
+ * evita una violación de FK en {@code setUp} si un cambio futuro las introduce.</p>
  */
 @SpringBootTest
 @Testcontainers
@@ -106,6 +116,9 @@ class CompraControllerIntegrationTests {
     private IdempotencyKeyRepository idempotencyKeyRepository;
 
     @Autowired
+    private NotificacionRepository notificacionRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     private Usuario vendedor;
@@ -115,6 +128,19 @@ class CompraControllerIntegrationTests {
 
     private final String passwordRaw = "PasswordSeguro123!";
 
+    /**
+     * Prepara MockMvc y deja la base de datos vacía antes de crear los fixtures compartidos
+     * (vendedor y comprador).
+     *
+     * <p><strong>Orden de limpieza (fix preventivo PHA15TSK09, decisión de plan.md 2026-08-31,
+     * patrón PHA15TSK04-L07):</strong> {@code notificaciones} se elimina PRIMERO porque
+     * referencian a {@code transacciones} ({@code fk_notificaciones_transaccion}, V14), a
+     * {@code publicaciones} ({@code fk_notificaciones_publicacion}, V20) y a {@code usuarios}
+     * ({@code fk_notificaciones_usuario}, V9), y ninguna otra tabla las referencia; las demás
+     * tablas se borran en orden inverso a sus FKs salientes (p. ej. {@code idempotency_keys}
+     * antes que {@code transacciones}), de modo que ninguna fila hija sobreviva a su tabla
+     * padre.</p>
+     */
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
@@ -122,6 +148,12 @@ class CompraControllerIntegrationTests {
                 .apply(springSecurity())
                 .build();
 
+        // Fix preventivo PHA15TSK09 (decisión de plan.md 2026-08-31, patrón PHA15TSK04-L07): las
+        // notificaciones referencian transacciones (fk_notificaciones_transaccion, V14),
+        // publicaciones (fk_notificaciones_publicacion, V20) y usuarios (V9), y ninguna tabla las
+        // referencia, por lo que se borran PRIMERO para no violar esas FKs si algún escenario
+        // llegara a crearlas.
+        notificacionRepository.deleteAll();
         idempotencyKeyRepository.deleteAll();
         publicacionRepository.deleteAll();
         subcategoriaRepository.deleteAll();

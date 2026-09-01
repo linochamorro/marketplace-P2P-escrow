@@ -7,6 +7,7 @@ import com.easymarket.marketplace.model.Rol;
 import com.easymarket.marketplace.model.Subcategoria;
 import com.easymarket.marketplace.model.Usuario;
 import com.easymarket.marketplace.repository.CategoriaRepository;
+import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.PublicacionRepository;
 import com.easymarket.marketplace.repository.SubcategoriaRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
@@ -62,6 +63,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * hacen exclusivamente con esa identidad única, resuelta mediante {@link #obtenerAdminUnico()}.
  * Motivo: {@code UsuarioRepository.findByRol(Rol.ADMIN)} es Optional por diseño (invariante de
  * admin único, PHA06TSK02) y cualquier fixture con un ADMIN adicional rompe esa invariante.</p>
+ *
+ * <p><strong>Orden de limpieza del {@code setUp} (hardening preventivo PHA15TSK09, decisión de
+ * plan.md 2026-08-31, patrón PHA15TSK04-L07):</strong> las filas de {@code notificaciones} se
+ * eliminan PRIMERO porque referencian a {@code transacciones}
+ * ({@code fk_notificaciones_transaccion}, migración V14), a {@code publicaciones}
+ * ({@code fk_notificaciones_publicacion}, migración V20) y a {@code usuarios}
+ * ({@code fk_notificaciones_usuario}, migración V9), y ninguna otra tabla las referencia.
+ * Hardening preventivo: hoy ningún escenario de esta clase genera notificaciones, pero el orden
+ * evita una violación de FK en {@code setUp} si un cambio futuro las introduce.</p>
  */
 @SpringBootTest
 @Testcontainers
@@ -99,6 +109,9 @@ public class CategoriaControllerIntegrationTests {
     private PublicacionRepository publicacionRepository;
 
     @Autowired
+    private NotificacionRepository notificacionRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     /** Email del ADMIN único provisionado por el contexto de test (propiedad {@code ADMIN_EMAIL}, seed V6). */
@@ -113,6 +126,10 @@ public class CategoriaControllerIntegrationTests {
      * Prepara MockMvc, limpia catálogo y usuarios de fixtures y repuebla el escenario: el usuario
      * regular nace aquí; el ADMIN único es el provisionado por el seed V6, que sobrevive a la
      * limpieza (política PHA12TSK06).
+     *
+     * <p>Desde PHA15TSK09 (decisión de plan.md 2026-08-31, patrón PHA15TSK04-L07) la limpieza
+     * arranca con {@code notificaciones} (FKs salientes V14/V20/V9, ninguna entrante) como
+     * primera sentencia, antes de {@code publicaciones}/{@code usuarios}.</p>
      */
     @BeforeEach
     void setUp() {
@@ -121,6 +138,12 @@ public class CategoriaControllerIntegrationTests {
                 .apply(springSecurity())
                 .build();
 
+        // Fix preventivo PHA15TSK09 (decisión de plan.md 2026-08-31, patrón PHA15TSK04-L07): las
+        // notificaciones referencian transacciones (fk_notificaciones_transaccion, V14),
+        // publicaciones (fk_notificaciones_publicacion, V20) y usuarios (V9), y ninguna tabla las
+        // referencia, por lo que se borran PRIMERO para no violar esas FKs si algún escenario
+        // llegara a crearlas.
+        notificacionRepository.deleteAll();
         publicacionRepository.deleteAll();
         subcategoriaRepository.deleteAll();
         categoriaRepository.deleteAll();
