@@ -38,3 +38,7 @@ yarn-error.log*
 # Variables de entorno (cualquier ubicación)
 .env*
 !**/.env.example
+
+# Evidencia de procesos (Artifacts referencian estos logs; se preservan en disco)
+*.log
+*.log.err
