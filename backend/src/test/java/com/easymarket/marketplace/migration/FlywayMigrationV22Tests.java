@@ -34,10 +34,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * (a diferencia de los triggers append-only V10/V11/V15/V17): no bloquea {@code UPDATE} ni
  * {@code DELETE} sobre {@code publicaciones}.</p>
  *
- * <p>Las categorías y subcategorías se crean de forma idempotente ({@code ON CONFLICT DO NOTHING}):
- * el perfil {@code dev} activo en el contexto de prueba ya siembra {@code Electrónica}, {@code Moda}
- * y {@code Hogar y Decoración} (R__seed_demo.sql), por lo que las pruebas no deben asumir un
- * catálogo vacío ni colisionar con el seed.</p>
+ * <p>Las categorías y subcategorías se crean de forma idempotente ({@code ON CONFLICT DO NOTHING}).
+ * El contexto de prueba NO carga {@code db/dev}: su {@code spring.flyway.locations} apunta solo a
+ * {@code classpath:db/migration}, por lo que el seed repeatable {@code R__seed_demo.sql} no se
+ * aplica en este test. Los helpers {@code crearCategoria} y {@code crearSubcategoria} crean o
+ * recuperan (de forma idempotente) categorías y subcategorías de prueba para ser robustos ante un
+ * catálogo ya existente o vacío; la idempotencia es robustez, no un requisito impuesto por el seed.</p>
  */
 @SpringBootTest
 @Testcontainers
@@ -262,8 +264,9 @@ class FlywayMigrationV22Tests {
     }
 
     /**
-     * Crea (o recupera) una categoría por nombre único. Idempotente: si la categoría ya existe
-     * (p. ej. de la semilla del perfil dev), no la duplica y devuelve su identificador.
+     * Crea (o recupera) una categoría por nombre único. Idempotente: si la categoría ya existe en el
+     * catálogo (que puede estar poblado o vacío, sin depender de la semilla dev), no la duplica y
+     * devuelve su identificador.
      *
      * @param nombre nombre único de la categoría
      * @return identificador de la categoría existente o recién creada
