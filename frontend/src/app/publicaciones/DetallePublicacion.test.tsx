@@ -77,7 +77,8 @@ describe('DetallePublicacion (PHA06TSK11)', () => {
       categoriaId: 10,
       subcategoriaId: 101,
       usuarioId: 8,
-      imagenFilename: 'laptop73.jpg'
+      imagenFilename: 'laptop73.jpg',
+      codigoProducto: '2026ELE00006'
     }));
 
     expect(await screen.findByRole('heading', { name: 'Laptop profesional' })).toBeInTheDocument();
@@ -145,7 +146,8 @@ describe('DetallePublicacion (PHA06TSK11)', () => {
       categoriaId: 1,
       subcategoriaId: 2,
       usuarioId: 3,
-      imagenFilename: 'publicacionA.jpg'
+      imagenFilename: 'publicacionA.jpg',
+      codigoProducto: '2026ELE00007'
     }));
     expect(await screen.findByRole('heading', { name: 'Publicación A' })).toBeInTheDocument();
     expect(screen.getByTestId('compra-button')).toHaveTextContent('Compra para 41');
@@ -168,7 +170,8 @@ describe('DetallePublicacion (PHA06TSK11)', () => {
       categoriaId: 1,
       subcategoriaId: 2,
       usuarioId: 4,
-      imagenFilename: 'publicacionB.jpg'
+      imagenFilename: 'publicacionB.jpg',
+      codigoProducto: '2026ELE00008'
     }));
     expect(await screen.findByRole('heading', { name: 'Publicación B' })).toBeInTheDocument();
     expect(screen.getByText('S/ 52.00')).toBeInTheDocument();

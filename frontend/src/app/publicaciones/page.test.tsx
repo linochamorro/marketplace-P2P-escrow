@@ -69,7 +69,8 @@ describe('PublicacionesPage (PHA05TSK04)', () => {
         subcategoriaId: 101,
         usuarioId: 7,
         usuarioEmail: 'vendedor-inicial@example.com',
-        imagenFilename: null
+        imagenFilename: null,
+        codigoProducto: '2026ELE00001'
       }
     ];
     const resultadosFiltrados = [
@@ -83,7 +84,8 @@ describe('PublicacionesPage (PHA05TSK04)', () => {
         subcategoriaId: 101,
         usuarioId: 8,
         usuarioEmail: 'vendedor-filtrada@example.com',
-        imagenFilename: null
+        imagenFilename: null,
+        codigoProducto: '2026ELE00002'
       }
     ];
     const fetchMock = vi
@@ -124,7 +126,8 @@ describe('PublicacionesPage (PHA05TSK04)', () => {
       subcategoriaId: 101,
       usuarioId: 8,
       usuarioEmail: 'vendedor@example.com',
-      imagenFilename: 'auriculares-estudio.jpg'
+      imagenFilename: 'auriculares-estudio.jpg',
+      codigoProducto: '2026ELE00003'
     };
     global.fetch = vi
       .fn()
@@ -156,14 +159,16 @@ describe('PublicacionesPage (PHA05TSK04)', () => {
       subcategoriaId: 101,
       usuarioId: 8,
       usuarioEmail: 'vendedor-con-imagen@example.com',
-      imagenFilename: 'auriculares-estudio.jpg'
+      imagenFilename: 'auriculares-estudio.jpg',
+      codigoProducto: '2026ELE00004'
     };
     const sinImagen = {
       ...conImagen,
       id: 92,
       descripcion: 'Producto demo sin imagen',
       usuarioEmail: 'vendedor-sin-imagen@example.com',
-      imagenFilename: null
+      imagenFilename: null,
+      codigoProducto: '2026ELE00005'
     };
     global.fetch = vi
       .fn()
@@ -177,5 +182,33 @@ describe('PublicacionesPage (PHA05TSK04)', () => {
       '/imagenes/publicaciones/auriculares-estudio.jpg'
     );
     expect(screen.queryByRole('img', { name: /producto demo sin imagen/i })).not.toBeInTheDocument();
+  });
+
+  it('la card renderiza el código de producto de negocio autogenerado (PHA15TSK14)', async () => {
+    const publicacion = {
+      id: 73,
+      precio: 125050,
+      stock: 4,
+      estado: 'APROBADA',
+      descripcion: 'Laptop profesional',
+      categoriaId: 10,
+      subcategoriaId: 101,
+      usuarioId: 8,
+      usuarioEmail: 'vendedor@example.com',
+      imagenFilename: 'auriculares-estudio.jpg',
+      codigoProducto: '2026ELE00003'
+    };
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(respuestaOk([]))
+      .mockResolvedValueOnce(respuestaOk([publicacion]));
+
+    render(<PublicacionesPage />);
+
+    expect(await screen.findByText('Laptop profesional')).toBeInTheDocument();
+    // El código de negocio es visible como texto legible, distinto del id interno del registro.
+    expect(screen.getByText('Código: 2026ELE00003')).toBeInTheDocument();
+    // El id numérico interno no se presenta como "código".
+    expect(screen.queryByText(/Código: 73/i)).not.toBeInTheDocument();
   });
 });

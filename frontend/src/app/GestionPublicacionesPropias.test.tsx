@@ -29,7 +29,8 @@ function publicacion(id: number, estado: string, categoriaId = 7, subcategoriaId
     subcategoriaId,
     usuarioId: 3,
     usuarioEmail: 'vendedor@example.com',
-    imagenFilename
+    imagenFilename,
+    codigoProducto: `2026ELE${String(id).padStart(5, '0')}`
   };
 }
 

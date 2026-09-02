@@ -47,6 +47,8 @@ export interface PublicacionListado {
   usuarioEmail: string;
   /** Nombre del archivo de imagen del DTO backend (sin prefijo de URL), o `null` cuando la publicación no tiene imagen. */
   imagenFilename: string | null;
+  /** Código de negocio autogenerado por el Sistema en formato `{YYYY}{PREF}{NNNNN}` (p. ej. `2026ELE00001`), expuesto por el DTO en PHA15TSK13. Es el identificador de negocio del producto, distinto del `id` interno del registro. */
+  codigoProducto: string;
 }
 
 /** Valores autorizados por `OrdenListadoPublicaciones` para el query `orden`. */
