@@ -1,13 +1,37 @@
 package com.easymarket.marketplace.dto;
 
+import jakarta.validation.constraints.NotBlank;
+
 import java.util.Objects;
 
 /**
  * Objeto de transferencia de datos (DTO) para las solicitudes de inicio de sesión (login).
+ *
+ * <p>La validación de entrada (PHA16TSK06; informe de auditoría 2026-09-13, hallazgo A5)
+ * rechaza con HTTP 400 los cuerpos sin email o sin password, antes de la verificación
+ * de credenciales y del rate limiting. Esto cambia deliberadamente el contrato de error
+ * de {@code POST /auth/login} con cuerpo vacío o campos en blanco de 401 a 400. Los
+ * mensajes están en español, consistentes con el precedente de {@code CategoriaRequestDto}.</p>
  */
 public class LoginRequestDto {
 
+    /**
+     * Correo electrónico del usuario.
+     *
+     * <p>No puede ser nulo, vacío ni estar compuesto solo por blancos
+     * ({@code @NotBlank}). No se exige formato de email: unas credenciales con
+     * formato válido pero inexistentes siguen respondiendo 401 genérico.</p>
+     */
+    @NotBlank(message = "El email no puede estar vacío")
     private String email;
+
+    /**
+     * Contraseña en texto plano del usuario.
+     *
+     * <p>No puede ser nula, vacía ni estar compuesta solo por blancos
+     * ({@code @NotBlank}).</p>
+     */
+    @NotBlank(message = "La contraseña no puede estar vacía")
     private String password;
 
     /**

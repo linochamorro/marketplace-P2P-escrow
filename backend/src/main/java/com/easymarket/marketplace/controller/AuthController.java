@@ -12,6 +12,7 @@ import com.easymarket.marketplace.service.LoginService;
 import com.easymarket.marketplace.service.RateLimitingService;
 import com.easymarket.marketplace.service.RegistroService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -74,6 +75,8 @@ public class AuthController {
      *   <li>Invoca {@link RegistroService#registrarUsuario(String, String)} para validar contraseña y unicidad de correo.</li>
      *   <li>Responde con código HTTP 201 Created y el DTO seguro {@link RegistroResponseDto} sin hash de contraseña.</li>
      *   <li>No aplica rate limiting ni genera cookie JWT (Story 0 no requiere login automático).</li>
+     *   <li>La anotación {@code @Valid} rechaza con HTTP 400 los cuerpos sin email o sin password
+     *       y el email con formato inválido (PHA16TSK06), antes de invocar al dominio.</li>
      * </ul>
      * </p>
      *
@@ -83,7 +86,7 @@ public class AuthController {
      * @throws PasswordInvalidaException si la contraseña no cumple la política (mapeado a HTTP 400 por {@link GlobalExceptionHandler})
      */
     @PostMapping("/registro")
-    public ResponseEntity<RegistroResponseDto> registrar(@RequestBody RegistroRequestDto registroRequest) {
+    public ResponseEntity<RegistroResponseDto> registrar(@Valid @RequestBody RegistroRequestDto registroRequest) {
         Usuario usuarioCreado = registroService.registrarUsuario(
                 registroRequest.getEmail(),
                 registroRequest.getPassword()
@@ -95,10 +98,12 @@ public class AuthController {
      * Endpoint REST {@code POST /auth/login} para el inicio de sesión de usuarios.
      *
      * <p>Sigue el contrato de orden de invocación de {@link RateLimitingService}:
-     * 1. {@code evaluarAcceso()} verifica si la clave email + IP está actualmente bloqueada (lanza 429 si lo está).
-     * 2. {@code loginService.login()} verifica credenciales y genera token JWT.
-     * 3. En caso de fallo de credenciales, {@code registrarFallo()} incrementa intentos en rate limiting y lanza 401.
-     * 4. En caso de éxito, {@code registrarExito()} reinicia intentos y setea la cookie {@code jwt} en la respuesta.
+     * 1. {@code @Valid} rechaza con HTTP 400 los cuerpos sin email o sin password (PHA16TSK06),
+     *    antes de evaluar el acceso y sin registrar intentos en rate limiting.
+     * 2. {@code evaluarAcceso()} verifica si la clave email + IP está actualmente bloqueada (lanza 429 si lo está).
+     * 3. {@code loginService.login()} verifica credenciales y genera token JWT.
+     * 4. En caso de fallo de credenciales, {@code registrarFallo()} incrementa intentos en rate limiting y lanza 401.
+     * 5. En caso de éxito, {@code registrarExito()} reinicia intentos y setea la cookie {@code jwt} en la respuesta.
      * </p>
      *
      * @param loginRequest DTO con credenciales (email y password)
@@ -109,7 +114,7 @@ public class AuthController {
      */
     @PostMapping("/login")
     public ResponseEntity<Map<String, String>> login(
-            @RequestBody LoginRequestDto loginRequest,
+            @Valid @RequestBody LoginRequestDto loginRequest,
             HttpServletRequest request
     ) {
         String ip = obtenerIpCliente(request);

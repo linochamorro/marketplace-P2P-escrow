@@ -12,7 +12,15 @@ import jakarta.persistence.Table;
 import java.time.ZonedDateTime;
 
 /**
- * Orden durable y mutable que un procesador posterior enviará a Stripe para reembolsar una cancelación.
+ * Orden durable y mutable que un procesador posterior enviará a Stripe para reembolsar un pago.
+ *
+ * <p>La orden nace de una cancelación ya validada (con transacción asociada) o del perdedor de
+ * la carrera de stock (PHA16TSK02, Story 5 de spec.md): cuando el {@code payment_intent.succeeded}
+ * no obtiene stock, no existe transacción alguna y la orden se persiste con
+ * {@code transaccion = null} (columna {@code transaccion_id} NULL, abierta por la migración V23),
+ * el {@code payment_intent_id} del evento y la clave determinista
+ * {@code refund:pi:{paymentIntentId}}. El {@code StripeRefundOutboxJob} existente la procesa
+ * sin cambios (saga/outbox de PHA04).</p>
  */
 @Entity
 @Table(name = "stripe_refund_outbox")
@@ -22,8 +30,8 @@ public class StripeRefundOutbox {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "transaccion_id", nullable = false)
+    @ManyToOne(optional = true)
+    @JoinColumn(name = "transaccion_id", nullable = true)
     private Transaccion transaccion;
 
     @Column(name = "payment_intent_id", nullable = false, length = 255)
@@ -71,6 +79,34 @@ public class StripeRefundOutbox {
     }
 
     /**
+     * Construye una orden pendiente de reembolso para el perdedor de la carrera de stock
+     * (PHA16TSK02, Story 5 de spec.md): el pago fue cobrado por Stripe pero el decremento
+     * atómico de stock no obtuvo unidades, por lo que no existe ninguna transacción asociada y
+     * {@code transaccion} queda en {@code null} (columna {@code transaccion_id} NULL, admitida
+     * desde la migración V23).
+     *
+     * <p>La clave idempotente de estas órdenes sigue el formato
+     * {@code refund:pi:{paymentIntentId}}, en un espacio de nombres disjunto del de cancelación
+     * y disputa ({@code refund:{transaccionId}} numérico): nunca colisionan entre sí y el UNIQUE
+     * de {@code idempotency_key} impide además duplicar la orden del mismo pago.</p>
+     *
+     * @param paymentIntentId identificador Stripe que el procesador posterior reembolsará
+     * @param idempotencyKey clave determinista {@code refund:pi:{paymentIntentId}} usada por
+     *                         Stripe durante reintentos
+     * @param createdAt instante de creación de la orden
+     */
+    public StripeRefundOutbox(String paymentIntentId, String idempotencyKey,
+                              ZonedDateTime createdAt) {
+        this.transaccion = null;
+        this.paymentIntentId = paymentIntentId;
+        this.idempotencyKey = idempotencyKey;
+        this.estado = "PENDIENTE";
+        this.intentos = 0;
+        this.createdAt = createdAt;
+        this.updatedAt = createdAt;
+    }
+
+    /**
      * Obtiene el ID persistente de la orden.
      *
      * @return ID persistente de la orden, o {@code null} antes de insertarla
@@ -78,9 +114,12 @@ public class StripeRefundOutbox {
     public Long getId() { return id; }
 
     /**
-     * Obtiene la transacción cancelada que originó la orden.
+     * Obtiene la transacción cancelada que originó la orden, o {@code null} si la orden es del
+     * perdedor de la carrera de stock (PHA16TSK02): en ese caso no se creó ninguna transacción
+     * porque el decremento atómico de stock no obtuvo unidades.
      *
-     * @return transacción cancelada que originó la orden
+     * @return transacción cancelada que originó la orden, o {@code null} para el perdedor de
+     *         la carrera de stock
      */
     public Transaccion getTransaccion() { return transaccion; }
 

@@ -31,6 +31,7 @@ marketplace-P2P-escrow/
 │   └── stitch-screens/         # Referencia visual de UI generada con Google Stitch
 │                               # (no se usa como código — solo como guía de composición)
 │
+├── .env.example              # Plantilla de variables de entorno del backend (raíz — copiar a .env)
 ├── docker-compose.yml          # PostgreSQL para desarrollo local
 ```
 
@@ -129,6 +130,8 @@ activo; `STRIPE_WEBHOOK_SECRET` y `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` reales
 ningún archivo versionado con valores de clave.
 
 Variables locales (archivos ignorados por Git, nunca versionados):
+
+Plantilla del backend (raíz): `cp .env.example .env` y completar con valores reales.
 
 - Raíz `.env`: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `ADMIN_EMAIL`,
   `ADMIN_PASSWORD`.

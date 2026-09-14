@@ -51,6 +51,7 @@ SELECT c.id, s.nombre
 FROM (VALUES
     ('Electrónica',         'Auriculares'),
     ('Electrónica',         'Smartwatches'),
+    ('Electrónica',         'Laptops'),
     ('Hogar y Decoración',  'Muebles'),
     ('Hogar y Decoración',  'Iluminación'),
     ('Moda',                'Ropa'),
@@ -61,7 +62,7 @@ ON CONFLICT (categoria_id, nombre) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. Publicaciones en estados navegables (PHA06TSK09-14):
---      aprobada ×2            → mercado, detalle y compra (PHA06TSK11)
+--      aprobada ×3            → mercado, detalle y compra (PHA06TSK11)
 --      pendiente_revisión ×2  → moderación (PHA06TSK13)
 --      rechazada ×1           → corrección/eliminación Story 3 (PHA06TSK10)
 --      cambios_solicitados ×1 → corrección Story 3 (PHA06TSK10)
@@ -80,7 +81,8 @@ FROM (VALUES
     ('Lámpara de escritorio LED regulable',                              'Hogar y Decoración', 'Iluminación',  8900, 2, 'pendiente_revisión'),
     ('Zapatillas urbanas de cuero talla 42',                             'Moda',               'Calzado',      24500, 1, 'rechazada'),
     ('Camisa de lino de manga larga color azul',                         'Moda',               'Ropa',         15900, 2, 'cambios_solicitados'),
-    ('Auriculares con cable de estudio',                                 'Electrónica',        'Auriculares',  5900, 0, 'oculta')
+    ('Auriculares con cable de estudio',                                 'Electrónica',        'Auriculares',  5900, 0, 'oculta'),
+    ('Laptop HP 200 G2a con procesador AMD Ryzen 5',                     'Electrónica',        'Laptops',      159900, 2, 'aprobada')
 ) AS p(descripcion, categoria_nombre, subcategoria_nombre, precio, stock, estado)
 JOIN usuarios u ON u.email = 'vendedor@easymarket.dev'
 JOIN categorias c ON c.nombre = p.categoria_nombre
@@ -93,8 +95,9 @@ WHERE NOT EXISTS (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 4. Imagen por publicación (PHA13TSK01): asigna imagen_filename a las 7 publicaciones
---    del seed mapeando cada descripción EXACTA del INSERT anterior a un archivo real
+-- 4. Imagen por publicación (PHA13TSK01, extendido PHA16TSK12): asigna imagen_filename
+--    a las 8 publicaciones del seed mapeando cada descripción EXACTA del INSERT anterior
+--    a un archivo real
 --    existente en frontend/public/imagenes/publicaciones/ (mapeo por coincidencia
 --    semántica, declarado en docs/avance/PHA13TSK01-L01-programmer.md).
 --
@@ -128,4 +131,8 @@ WHERE descripcion = 'Camisa de lino de manga larga color azul'
 
 UPDATE publicaciones SET imagen_filename = 'auriculares-estudio.jpg'
 WHERE descripcion = 'Auriculares con cable de estudio'
+  AND imagen_filename IS NULL;
+
+UPDATE publicaciones SET imagen_filename = 'laptop-hp-200-g2a-amd-ryzen5.png'
+WHERE descripcion = 'Laptop HP 200 G2a con procesador AMD Ryzen 5'
   AND imagen_filename IS NULL;

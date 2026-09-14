@@ -155,6 +155,10 @@ export async function cargarNotificaciones(url: string): Promise<NotificacionUI[
  * Tipos USER cuyo destino depende del mensaje: el backend no indica el rol del destinatario
  * dentro de la transacción, pero los textos emitidos por los servicios de dominio
  * (PHA12TSK03) distinguen al comprador con "tu compra" y al vendedor con "tu venta".
+ * Además, el aviso real al vendedor tras una compra nueva emitido por
+ * `ProcesadorEventosWebhookService` (PHA15TSK04) usa "tu publicación"
+ * ("Nueva compra confirmada en tu publicación #N: transacción #M") y también
+ * enruta al lado vendedor.
  *
  * <p>Incluye {@code RESPUESTA_USUARIO_PENDIENTE} aunque hoy ningún servicio lo emita:
  * figura en el filtro por rol de {@code NotificacionService.listarPorUsuarioYRol} y en el
@@ -180,17 +184,23 @@ const TIPOS_USER_CON_TRANSACCION = new Set([
  *   <li>ADMIN — disputas: {@code DISPUTA_PENDIENTE_RESOLVER} → {@code /admin/disputas}.</li>
  *   <li>USER sin transacción: {@code PUBLICACION_APROBADA_RECHAZADA} →
  *       {@code /mis-publicaciones} (el backend la emite con {@code transaccionId: null}).</li>
- *   <li>USER con transacción ({@code COMPRA_CONFIRMADA}, {@code ENVIO_MARCADO},
- *       {@code ENTREGA_MARCADA}, {@code DISPUTA_ABIERTA}, {@code DISPUTA_RESUELTA},
- *       {@code RESPUESTA_USUARIO_PENDIENTE}): el mensaje decide el lado de la transacción —
- *       contiene "tu compra" → {@code /compras/{transaccionId}}; contiene "tu venta" →
- *       {@code /ventas/{transaccionId}} (textos reales de PHA12TSK03, p. ej.
- *       "El vendedor marcó tu compra #N como enviada" vs "Marcaste tu venta #N como enviada").</li>
+  *   <li>USER con transacción ({@code COMPRA_CONFIRMADA}, {@code ENVIO_MARCADO},
+  *       {@code ENTREGA_MARCADA}, {@code DISPUTA_ABIERTA}, {@code DISPUTA_RESUELTA},
+  *       {@code RESPUESTA_USUARIO_PENDIENTE}): el mensaje decide el lado de la transacción —
+  *       contiene "tu compra" → {@code /compras/{transaccionId}}; contiene "tu venta" →
+  *       {@code /ventas/{transaccionId}}; contiene "tu publicación" →
+  *       {@code /ventas/{transaccionId}} (textos reales de PHA12TSK03, p. ej.
+  *       "El vendedor marcó tu compra #N como enviada" vs "Marcaste tu venta #N como enviada",
+  *       y de PHA15TSK04 para el vendedor tras una compra nueva:
+  *       "Nueva compra confirmada en tu publicación #N: transacción #M").
+  *       Orden de evaluación: "tu compra" y "tu venta" primero (reglas vigentes intactas),
+  *       "tu publicación" después; ningún mensaje real contiene dos de estas expresiones
+  *       a la vez (verificado contra los mensajes emitidos por los servicios).</li>
  * </ul>
  *
- * <p>Fallback defensivo: devuelve {@code null} para tipos desconocidos, para tipos USER
- * con transacción sin {@code transaccionId} o cuando el mensaje no matchea ninguna de las
- * dos expresiones — la fila se muestra como texto plano, nunca como un link roto. El
+  * <p>Fallback defensivo: devuelve {@code null} para tipos desconocidos, para tipos USER
+  * con transacción sin {@code transaccionId} o cuando el mensaje no matchea ninguna de las
+  * tres expresiones — la fila se muestra como texto plano, nunca como un link roto. El
  * matching es insensible a mayúsculas/minúsculas por robustez ante cambios de estilo del
  * copy en el backend.</p>
  *
@@ -222,6 +232,9 @@ export function rutaDestino(
       return `/compras/${transaccionId}`;
     }
     if (mensajeNormalizado.includes('tu venta')) {
+      return `/ventas/${transaccionId}`;
+    }
+    if (mensajeNormalizado.includes('tu publicación')) {
       return `/ventas/${transaccionId}`;
     }
     return null;

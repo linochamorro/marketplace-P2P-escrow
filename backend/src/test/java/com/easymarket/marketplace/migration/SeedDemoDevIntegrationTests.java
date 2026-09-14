@@ -66,10 +66,31 @@ class SeedDemoDevIntegrationTests {
     private static final int CATEGORIAS_ESPERADAS = 3;
 
     /** Número esperado de subcategorías del catálogo de demostración. */
-    private static final int SUBCATEGORIAS_ESPERADAS = 6;
+    private static final int SUBCATEGORIAS_ESPERADAS = 7;
 
     /** Número esperado de publicaciones de demostración. */
-    private static final int PUBLICACIONES_ESPERADAS = 7;
+    private static final int PUBLICACIONES_ESPERADAS = 8;
+
+    /**
+     * Descripción exacta de la publicación demo del laptop (PHA16TSK12, decisión de Lino
+     * 2026-09-13 "Renombrar + seed"). Es la clave semántica de idempotencia junto al vendedor.
+     */
+    private static final String DESCRIPCION_LAPTOP = "Laptop HP 200 G2a con procesador AMD Ryzen 5";
+
+    /**
+     * Nombre exacto del asset renombrado a kebab-case sin espacios (PHA16TSK12), existente en
+     * {@code frontend/public/imagenes/publicaciones/}.
+     */
+    private static final String IMAGEN_LAPTOP = "laptop-hp-200-g2a-amd-ryzen5.png";
+
+    /** Nombre del asset viejo con espacios, que no debe existir tras el rename (PHA16TSK12). */
+    private static final String IMAGEN_LAPTOP_VIEJA = "Laptop-HP-200-G2a-AMD-Ryzen 5.png";
+
+    /** Precio demo del laptop en centavos (PEN), valor fijado por el Arquitecto (PHA16TSK12). */
+    private static final int PRECIO_LAPTOP = 159900;
+
+    /** Stock demo del laptop, valor fijado por el Arquitecto (PHA16TSK12). */
+    private static final int STOCK_LAPTOP = 2;
 
     @Container
     @ServiceConnection
@@ -127,7 +148,7 @@ class SeedDemoDevIntegrationTests {
         Integer publicaciones = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM publicaciones", Integer.class);
         assertThat(publicaciones).isEqualTo(PUBLICACIONES_ESPERADAS);
 
-        assertThat(contarPublicacionesPorEstado("aprobada")).isEqualTo(2);
+        assertThat(contarPublicacionesPorEstado("aprobada")).isEqualTo(3);
         assertThat(contarPublicacionesPorEstado("pendiente_revisión")).isEqualTo(2);
         assertThat(contarPublicacionesPorEstado("rechazada")).isEqualTo(1);
         assertThat(contarPublicacionesPorEstado("cambios_solicitados")).isEqualTo(1);
@@ -216,9 +237,10 @@ class SeedDemoDevIntegrationTests {
     }
 
     /**
-     * Verifica que el seed dev asigna {@code imagen_filename} a las siete publicaciones de
-     * demostración según el mapeo descripción → archivo declarado en PHA13TSK01 (coincidencia
-     * semántica contra archivos reales existentes en {@code frontend/public/imagenes/publicaciones/}).
+     * Verifica que el seed dev asigna {@code imagen_filename} a las ocho publicaciones de
+     * demostración según el mapeo descripción → archivo declarado en PHA13TSK01 y extendido en
+     * PHA16TSK12 (coincidencia semántica contra archivos reales existentes en
+     * {@code frontend/public/imagenes/publicaciones/}).
      *
      * <p>Los UPDATEs del seed usan la guardia {@code AND imagen_filename IS NULL}, por lo que la
      * asignación es idempotente y no sobrescribe decisiones de imagen ya tomadas por el usuario
@@ -226,7 +248,7 @@ class SeedDemoDevIntegrationTests {
      * filas nacen con NULL, así que aquí se verifica exactamente el mapeo completo).</p>
      */
     @Test
-    @DisplayName("El seed dev asigna imagen_filename a las 7 publicaciones según el mapeo declarado")
+    @DisplayName("El seed dev asigna imagen_filename a las 8 publicaciones según el mapeo declarado")
     void seedDev_asignaImagenFilenameSegunMapeoDeclarado() {
         Map<String, String> mapeoEsperado = Map.of(
                 "Auriculares inalámbricos Bluetooth con cancelación de ruido", "auriculares-bluetooth.jpg",
@@ -235,7 +257,8 @@ class SeedDemoDevIntegrationTests {
                 "Lámpara de escritorio LED regulable", "lampara-escritorio-led.jpg",
                 "Zapatillas urbanas de cuero talla 42", "zapatillas-cuero-42.jpg",
                 "Camisa de lino de manga larga color azul", "camisa-lino-azul.jpg",
-                "Auriculares con cable de estudio", "auriculares-estudio.jpg");
+                "Auriculares con cable de estudio", "auriculares-estudio.jpg",
+                DESCRIPCION_LAPTOP, IMAGEN_LAPTOP);
 
         List<Map<String, Object>> filas = jdbcTemplate.queryForList(
                 "SELECT descripcion, imagen_filename FROM publicaciones");
@@ -252,6 +275,171 @@ class SeedDemoDevIntegrationTests {
                     .isNotNull()
                     .isEqualTo(mapeoEsperado.get(descripcion));
         }
+    }
+
+    /**
+     * Verifica que el seed dev crea la publicación demo del laptop (PHA16TSK12, decisión de Lino
+     * 2026-09-13 "Renombrar + seed") con los valores fijados por el Arquitecto: precio demo 159900
+     * centavos, stock 2, estado {@code aprobada}, subcategoría {@code Laptops} bajo
+     * {@code Electrónica} e {@code imagen_filename} exacto del asset renombrado a kebab-case.
+     *
+     * <p>En Red phase (sin el seed extendido) falla por ausencia: la fila no existe y
+     * {@code queryForMap} lanza {@code EmptyResultDataAccessException} — la razón correcta,
+     * no un fallo de setup.</p>
+     */
+    @Test
+    @DisplayName("El seed dev crea la publicación del laptop con precio, stock, estado e imagen fijados")
+    void seedDev_creaPublicacionLaptopConValoresFijados() {
+        Map<String, Object> laptop = jdbcTemplate.queryForMap(
+                "SELECT p.precio, p.stock, p.estado, p.imagen_filename, p.codigo_producto, "
+                        + "c.nombre AS categoria, sub.nombre AS subcategoria "
+                        + "FROM publicaciones p "
+                        + "JOIN usuarios u ON u.id = p.usuario_id "
+                        + "JOIN categorias c ON c.id = p.categoria_id "
+                        + "JOIN subcategorias sub ON sub.id = p.subcategoria_id "
+                        + "WHERE u.email = ? AND p.descripcion = ?",
+                EMAIL_VENDEDOR, DESCRIPCION_LAPTOP);
+        assertThat(((Number) laptop.get("precio")).intValue())
+                .as("precio demo del laptop en centavos (valor fijado PHA16TSK12)")
+                .isEqualTo(PRECIO_LAPTOP);
+        assertThat(((Number) laptop.get("stock")).intValue())
+                .as("stock demo del laptop (valor fijado PHA16TSK12)")
+                .isEqualTo(STOCK_LAPTOP);
+        assertThat(laptop.get("estado"))
+                .as("estado demo del laptop (valor fijado PHA16TSK12)")
+                .isEqualTo("aprobada");
+        assertThat(laptop.get("categoria")).isEqualTo("Electrónica");
+        assertThat(laptop.get("subcategoria")).isEqualTo("Laptops");
+        assertThat((String) laptop.get("imagen_filename"))
+                .as("la publicación del laptop debe mapear al asset renombrado")
+                .isEqualTo(IMAGEN_LAPTOP);
+        assertThat((String) laptop.get("codigo_producto"))
+                .as("el trigger V22 debe haber asignado codigo_producto al insertar el seed")
+                .isNotNull();
+    }
+
+    /**
+     * Verifica que re-ejecutar el seed dev no duplica la publicación del laptop y no sobrescribe
+     * una imagen ya asignada (PHA16TSK12, criterio b).
+     *
+     * <p>Re-ejecución con el patrón existente de la clase: {@link ResourceDatabasePopulator} sobre
+     * {@code db/dev/R__seed_demo.sql} desde classpath con UTF-8 explícito (el mismo script que
+     * Flyway aplica como migración repeatable). La no-sobrescritura se prueba de forma real:
+     * se asigna manualmente una imagen distinta a la del laptop, se re-ejecuta el seed y se
+     * verifica que la imagen manual sobrevive — ejerciendo la guardia
+     * {@code AND imagen_filename IS NULL} del UPDATE (patrón PHA13TSK01).</p>
+     */
+    @Test
+    @DisplayName("Re-ejecutar el seed no duplica el laptop ni sobrescribe su imagen ya asignada")
+    void seedDev_reaplicarNoDuplicaLaptopNiSobrescribeImagen() {
+        // Precondición: el seed ya creó la publicación del laptop al arrancar el contexto.
+        Integer laptopInicial = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM publicaciones p JOIN usuarios u ON u.id = p.usuario_id "
+                        + "WHERE u.email = ? AND p.descripcion = ?",
+                Integer.class, EMAIL_VENDEDOR, DESCRIPCION_LAPTOP);
+        assertThat(laptopInicial)
+                .as("el seed debe haber creado la publicación del laptop al arrancar")
+                .isEqualTo(1);
+
+        // Asignar manualmente una imagen distinta: simula la decisión de un usuario en una BD
+        // ya sembrada, que el seed nunca debe pisar.
+        String imagenManual = "mi-imagen-manual.jpg";
+        jdbcTemplate.update("UPDATE publicaciones SET imagen_filename = ? WHERE descripcion = ?",
+                imagenManual, DESCRIPCION_LAPTOP);
+
+        try {
+            reaplicarSeed();
+
+            assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM publicaciones", Integer.class))
+                    .as("re-ejecutar el seed no debe crear publicaciones adicionales")
+                    .isEqualTo(PUBLICACIONES_ESPERADAS);
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM publicaciones p JOIN usuarios u ON u.id = p.usuario_id "
+                            + "WHERE u.email = ? AND p.descripcion = ?",
+                    Integer.class, EMAIL_VENDEDOR, DESCRIPCION_LAPTOP))
+                    .as("la clave semántica (usuario_id, descripcion) del laptop no debe duplicarse")
+                    .isEqualTo(1);
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT imagen_filename FROM publicaciones WHERE descripcion = ?",
+                    String.class, DESCRIPCION_LAPTOP))
+                    .as("la guardia IS NULL debe preservar la imagen asignada manualmente")
+                    .isEqualTo(imagenManual);
+        } finally {
+            // Restaurar la imagen del seed: la clase comparte una sola BD por contexto Spring y
+            // JUnit no garantiza el orden entre métodos — sin esta limpieza, la imagen manual
+            // contaminaría los tests del mapeo (defecto de aislamiento detectado en Green).
+            jdbcTemplate.update("UPDATE publicaciones SET imagen_filename = ? WHERE descripcion = ?",
+                    IMAGEN_LAPTOP, DESCRIPCION_LAPTOP);
+        }
+    }
+
+    /**
+     * Verifica que las 7 publicaciones previas al laptop conservan su mapeo
+     * descripción → {@code imagen_filename} declarado en PHA13TSK01 (PHA16TSK12, criterio c):
+     * la extensión del seed no altera ninguna fila existente.
+     */
+    @Test
+    @DisplayName("Las 7 publicaciones previas conservan su mapeo de imagen tras extender el seed")
+    void seedDev_sietePreviasConservanMapeo() {
+        Map<String, String> mapeoPrevio = Map.of(
+                "Auriculares inalámbricos Bluetooth con cancelación de ruido", "auriculares-bluetooth.jpg",
+                "Smartwatch deportivo con GPS y monitor de ritmo cardíaco", "smartwatch-gps.jpg",
+                "Mesa de centro de madera de cedro de 90 cm", "mesa-centro-cedro.jpg",
+                "Lámpara de escritorio LED regulable", "lampara-escritorio-led.jpg",
+                "Zapatillas urbanas de cuero talla 42", "zapatillas-cuero-42.jpg",
+                "Camisa de lino de manga larga color azul", "camisa-lino-azul.jpg",
+                "Auriculares con cable de estudio", "auriculares-estudio.jpg");
+
+        assertThat(mapeoPrevio).hasSize(7);
+        for (Map.Entry<String, String> entrada : mapeoPrevio.entrySet()) {
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT imagen_filename FROM publicaciones WHERE descripcion = ?",
+                    String.class, entrada.getKey()))
+                    .as("la publicación previa '%s' debe conservar su imagen", entrada.getKey())
+                    .isEqualTo(entrada.getValue());
+        }
+    }
+
+    /**
+     * Verifica el rename del asset en disco (PHA16TSK12, criterio d): el archivo kebab-case sin
+     * espacios existe en {@code frontend/public/imagenes/publicaciones/} y el nombre viejo con
+     * espacios ya no existe.
+     *
+     * <p>Las rutas se resuelven desde el directorio de trabajo del módulo backend
+     * ({@code user.dir} = {@code backend/} bajo Maven) hacia el frontend hermano. La ausencia de
+     * referencias al nombre viejo en código se verifica además con grep (evidencia en el
+     * Artifact): antes del move el grep sobre {@code frontend/src}, {@code backend/src} y
+     * {@code frontend/public} es vacío — solo quedan menciones documentales en
+     * {@code docs/avance}, {@code plan.md}, {@code tasks.md}, {@code CHANGELOG.md} y
+     * {@code ESTADO_PROYECTO.md}.</p>
+     *
+     * <p>En Red phase (sin el rename) falla por ausencia: el archivo nuevo no existe — la razón
+     * correcta, no un fallo de setup.</p>
+     */
+    @Test
+    @DisplayName("El asset del laptop existe con nombre kebab-case y el nombre viejo ya no existe")
+    void seedDev_archivoLaptopRenombradoExiste() {
+        java.nio.file.Path directorio = java.nio.file.Paths.get(
+                System.getProperty("user.dir"), "..", "frontend", "public", "imagenes",
+                "publicaciones").normalize();
+        assertThat(java.nio.file.Files.isRegularFile(directorio.resolve(IMAGEN_LAPTOP)))
+                .as("el asset renombrado %s debe existir en %s", IMAGEN_LAPTOP, directorio)
+                .isTrue();
+        assertThat(java.nio.file.Files.exists(directorio.resolve(IMAGEN_LAPTOP_VIEJA)))
+                .as("el asset con el nombre viejo con espacios ya no debe existir")
+                .isFalse();
+    }
+
+    /**
+     * Re-aplica el script completo del seed dev, simulando la re-ejecución de la migración
+     * repeatable por cambio de checksum (patrón existente de la clase, PHA06TSK08).
+     * UTF-8 explícito por el valor 'pendiente_revisión'.
+     */
+    private void reaplicarSeed() {
+        ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
+        populator.setSqlScriptEncoding("UTF-8");
+        populator.addScript(new ClassPathResource("db/dev/R__seed_demo.sql"));
+        populator.execute(dataSource);
     }
 
     /**

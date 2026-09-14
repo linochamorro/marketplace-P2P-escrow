@@ -1,0 +1,61 @@
+name: CI
+
+# Triggers (decision declarada en el Artifact PHA16TSK11-L01):
+# - push y pull_request SIN filtro de ramas: la regla 9 prohibe a este rol
+#   usar git, por lo que no puedo verificar el nombre de la rama por defecto
+#   del repo; filtrar por `main` seria asumir en silencio. Sin filtro el
+#   workflow corre en todas las ramas sin suposiciones.
+# - workflow_dispatch: permite lanzamiento manual desde la UI de GitHub.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend (Maven + Testcontainers)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK 21 (Temurin) with Maven cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build and test
+        # Testcontainers usa el Docker del runner ubuntu-latest; no requiere
+        # servicio ni configuracion adicional.
+        run: mvn -B -ntp clean test
+
+  frontend:
+    name: Frontend (lint + typecheck + test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js with npm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          # Ruta relativa a la raiz del repo (los inputs de `uses` no heredan
+          # defaults.run.working-directory); el lockfile vive en frontend/.
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
