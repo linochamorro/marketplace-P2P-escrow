@@ -9,6 +9,7 @@ import com.easymarket.marketplace.model.Subcategoria;
 import com.easymarket.marketplace.model.Usuario;
 import com.easymarket.marketplace.repository.CategoriaRepository;
 import com.easymarket.marketplace.repository.IdempotencyKeyRepository;
+import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.ProcessedStripeEventRepository;
 import com.easymarket.marketplace.repository.PublicacionRepository;
 import com.easymarket.marketplace.repository.SubcategoriaRepository;
@@ -76,6 +77,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *       transacción; una sola fila en {@code processed_stripe_events}).</li>
  * </ol>
  * </p>
+ *
+ * <p><strong>Orden de limpieza del {@code setUp} (fix PHA15TSK04-L07):</strong> el flujo
+ * COMPRA_CONFIRMADA (TSK04) inserta filas en {@code notificaciones} con
+ * {@code transaccion_id}/{@code publicacion_id}; el {@code setUp} elimina
+ * {@code notificaciones} antes que {@code transacciones} y {@code publicaciones} para no violar
+ * {@code fk_notificaciones_transaccion} (V14) ni {@code fk_notificaciones_publicacion} (V20).</p>
  */
 @SpringBootTest
 @Testcontainers
@@ -114,6 +121,9 @@ class StripeWebhookControllerIntegrationTests {
     private IdempotencyKeyRepository idempotencyKeyRepository;
 
     @Autowired
+    private NotificacionRepository notificacionRepository;
+
+    @Autowired
     private TransaccionRepository transaccionRepository;
 
     @Autowired
@@ -129,6 +139,18 @@ class StripeWebhookControllerIntegrationTests {
     private Categoria categoria;
     private Subcategoria subcategoria;
 
+    /**
+     * Prepara el entorno de cada prueba: levanta {@link MockMvc} con la cadena de seguridad de
+     * Spring y deja la base de datos vacía antes de crear los fixtures compartidos (vendedor,
+     * comprador, categoría y subcategoría).
+     *
+     * <p><strong>Orden de limpieza (fix PHA15TSK04-L07):</strong> las filas de
+     * {@code notificaciones} se eliminan PRIMERO porque referencian a {@code transacciones}
+     * ({@code fk_notificaciones_transaccion}, V14) y a {@code publicaciones}
+     * ({@code fk_notificaciones_publicacion}, V20), y ninguna otra tabla las referencia; las
+     * demás tablas se borran en orden inverso a sus FKs salientes (p. ej. {@code idempotency_keys}
+     * antes que {@code transacciones}), de modo que ninguna fila hija sobreviva a su tabla padre.</p>
+     */
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
@@ -139,6 +161,12 @@ class StripeWebhookControllerIntegrationTests {
         // Limpieza en orden inverso a las FKs: processed_stripe_events e idempotency_keys no
         // tienen dependencias salientes; idempotency_keys apunta a transacciones
         // (fk_idempotency_keys_transaccion), por lo que debe borrarse ANTES que las transacciones.
+        // Las notificaciones referencian transacciones (fk_notificaciones_transaccion, V14) y
+        // publicaciones (fk_notificaciones_publicacion, V20) y nada las referencia, por lo que se
+        // borran PRIMERO (fix PHA15TSK04-L07: el flujo COMPRA_CONFIRMADA de TSK04 inserta
+        // notificaciones con transaccion_id y si sobrevivían al deleteAll de transacciones la FK
+        // violaba en este setUp).
+        notificacionRepository.deleteAll();
         processedStripeEventRepository.deleteAll();
         idempotencyKeyRepository.deleteAll();
         transaccionRepository.deleteAll();

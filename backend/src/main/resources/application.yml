@@ -13,6 +13,12 @@ spring:
   application:
     name: marketplace
 
+  # Perfil por defecto cuando el proceso arranca sin SPRING_PROFILES_ACTIVE:
+  # desarrollo local usa dev (con seed demostrativo); los perfiles explícitos
+  # test y prod no se ven afectados (PHA07TSK01).
+  profiles:
+    default: dev
+
   # ─── JPA / Hibernate ────────────────────────────────────────────────────────
   jpa:
     # NUNCA "update" ni "create". Flyway es el único responsable del esquema.

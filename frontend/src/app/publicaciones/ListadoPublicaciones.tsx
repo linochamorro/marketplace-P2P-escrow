@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   cargarCategorias,
@@ -11,6 +13,8 @@ import {
   type FiltrosListado,
   type PublicacionListado
 } from './publicaciones-utils';
+
+export { default as DetallePublicacion } from './DetallePublicacion';
 
 /** Props de transporte inyectable para aislar consultas reales en pruebas de componente. */
 export interface ListadoPublicacionesProps {
@@ -31,6 +35,10 @@ const FILTROS_INICIALES: FiltrosListado = {
  *
  * @param props transportes opcionales para pruebas; la ruta usa los endpoints reales por defecto
  * @returns controles de filtros, estados de consulta y tarjetas de publicaciones aprobadas
+ *          con la imagen del producto encima de la descripción cuando `imagenFilename` existe,
+ *          o un bloque neutro de mismas dimensiones cuando es nulo (PHA13TSK01). Cada tarjeta
+ *          muestra además el código de negocio del producto (`codigoProducto`, PHA15TSK14) como
+ *          metadato secundario al pie, junto a stock y email del vendedor.
  */
 export default function ListadoPublicaciones({
   obtenerCategorias = cargarCategorias,
@@ -73,7 +81,8 @@ export default function ListadoPublicaciones({
   useEffect(() => {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
     /**
-     * Carga en el montaje las categorías de selects y el listado inicial sin filtros.
+     * Carga en el montaje las categorías de selects, el listado inicial sin filtros
+     * y evita llamadas síncronas a setState dentro del efecto (react-hooks/set-state-in-effect).
      *
      * @returns promesa que resuelve tras actualizar ambas lecturas independientes
      */
@@ -84,9 +93,9 @@ export default function ListadoPublicaciones({
       } catch (error) {
         setErrorMensaje(error instanceof Error ? error.message : 'Error de red al conectar con el servidor');
       }
+      await consultarPublicaciones(new URLSearchParams());
     };
     void cargarInicial();
-    void consultarPublicaciones(new URLSearchParams());
   }, [consultarPublicaciones, obtenerCategorias]);
 
   /**
@@ -162,7 +171,7 @@ export default function ListadoPublicaciones({
             </div>
           </div>
           {errorMensaje && <p role="alert" className="border border-[#ba1a1a] bg-[#ffdad6] p-3 text-sm font-medium text-[#93000a]">{errorMensaje}</p>}
-          {cargando ? <div role="status" aria-busy="true" className="border border-slate-200 bg-white p-6 text-slate-600">Cargando publicaciones...</div> : publicaciones.length === 0 && cargado && !errorMensaje ? <div className="border border-slate-200 bg-white p-6 text-slate-600">No se encontraron publicaciones.</div> : <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{publicaciones.map((publicacion) => <li key={publicacion.id} className="space-y-3 border border-slate-200 bg-white p-6"><p className="text-base text-[#0F172A]">{publicacion.descripcion}</p><p className="font-mono text-xl font-semibold text-[#0F172A]">{formatearPrecioSoles(publicacion.precio)}</p><p className="text-sm text-slate-600">Stock: {publicacion.stock}</p><p className="font-mono text-xs text-slate-500">ID publicación: {publicacion.id} · Categoría: {publicacion.categoriaId} · Subcategoría: {publicacion.subcategoriaId} · Vendedor: {publicacion.usuarioId}</p></li>)}</ul>}
+          {cargando ? <div role="status" aria-busy="true" className="border border-slate-200 bg-white p-6 text-slate-600">Cargando publicaciones...</div> : publicaciones.length === 0 && cargado && !errorMensaje ? <div className="border border-slate-200 bg-white p-6 text-slate-600">No se encontraron publicaciones.</div> : <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">{publicaciones.map((publicacion) => <li key={publicacion.id} className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 transition-colors hover:border-[#0F172A]">{/* Imagen del producto (PHA13TSK01): patrón canónico de GestionPublicacionesPropias (borde Slate-200, fondo slate-50, object-cover) escalado a card de marketplace; el contenedor es relative por requisito de next/image con fill. Sin imagenFilename se mantiene el bloque neutro para alinear el grid sin elemento img. */}<div className="relative h-48 w-full overflow-hidden rounded border border-slate-200 bg-slate-50">{publicacion.imagenFilename && <Image src={`/imagenes/publicaciones/${publicacion.imagenFilename}`} alt={publicacion.descripcion} fill sizes="(min-width: 1024px) 30vw, (min-width: 640px) 45vw, calc(100vw - 2rem)" className="object-cover" />}</div><div className="space-y-3"><p className="text-base font-semibold text-[#0F172A]">{publicacion.descripcion}</p><p className="font-mono text-xl font-semibold text-[#0F172A]">{formatearPrecioSoles(publicacion.precio)}</p><p className="text-sm text-slate-600">Stock: {publicacion.stock}</p><p className="text-sm text-slate-600">{publicacion.usuarioEmail}</p><p className="text-sm text-slate-600">Código: {publicacion.codigoProducto}</p></div><Link href={`/publicaciones/${publicacion.id}`} aria-label={`Ver detalle de ${publicacion.descripcion}`} className="mt-auto rounded border border-[#0F172A] bg-[#0F172A] px-4 py-2 text-center text-sm font-semibold text-white">Ver detalle</Link></li>)}</ul>}
         </section>
       </div>
     </main>

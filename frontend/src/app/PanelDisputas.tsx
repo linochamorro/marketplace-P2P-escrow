@@ -1,15 +1,12 @@
-'use client';
+﻿'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 
 /**
  * Rol del actor autenticado que visualiza el panel de disputas.
  *
- * <p>Se recibe por props (mismo patrón de plan.md, sección "Panel de transacción (PHA04TSK18)"):
- * no existe endpoint de identidad propio porque la cookie JWT es httpOnly e ilegible en el
- * frontend. El criterio del test previo de tasks.md exige que los botones de resolución solo
- * sean visibles cuando el rol es {@code ADMIN}; con {@code USUARIO} el panel se renderiza en
- * solo lectura, sin controles de resolución.</p>
+ * Se recibe desde la identidad real compartida por el shell. Los botones de
+ * resolución solo son visibles cuando el rol es {@code ADMIN}.
  */
 export type RolPanelDisputas = 'ADMIN' | 'USUARIO';
 
@@ -19,9 +16,7 @@ export type RolPanelDisputas = 'ADMIN' | 'USUARIO';
  * <p>Una disputa ES una transacción en estado {@code disputa} (contrato de
  * {@code DisputaController}: no existe entidad separada, el {@code {id}} de la ruta
  * {@code /disputas/{id}/resolver} es el ID de la transacción disputada). El componente recibe
- * las disputas por props porque NO existe {@code GET /disputas} ni endpoint de listado y
- * agregarlo sería scope creep de una tarea de capa UI (mismo argumento que plan.md:380 para
- * omitir {@code GET /transacciones/{id}}).</p>
+ * las disputas por props desde {@code GET /admin/disputas}.</p>
  */
 export interface DisputaPanel {
   /** ID de la transacción disputada — es el {@code {id}} de la ruta PATCH de resolución */
@@ -30,36 +25,25 @@ export interface DisputaPanel {
   precioSnapshot: number;
   /** Código de estado de la transacción; en una disputa válida es {@code 'disputa'} */
   estado: string;
+  /** Fecha ISO de reserva del DTO real. */
+  fechaReservada?: string;
+  /** Fecha ISO opcional de envío del DTO real. */
+  fechaEnviado?: string | null;
+  /** Fecha ISO opcional de entrega del DTO real. */
+  fechaEntregado?: string | null;
+  /** Descripción real de la publicación incluida por el DTO. */
+  publicacionDescripcion?: string;
 }
 
 /**
  * Props del componente {@link PanelDisputas}.
  */
 export interface PanelDisputasProps {
-  /** Lista opcional de disputas a mostrar (por defecto usa DISPUTAS_PENDIENTES_MOCK) */
-  disputasIniciales?: DisputaPanel[];
+  /** Lista real de disputas; vacía representa el estado vacío. */
+  disputasIniciales: DisputaPanel[];
   /** Rol del actor autenticado que visualiza el panel: solo {@code ADMIN} ve controles de resolución */
   rol: RolPanelDisputas;
 }
-
-/**
- * Datos estáticos temporales para la lista de disputas pendientes de resolución.
- * TODO: reemplazar con un endpoint real de listado de disputas (no existe GET /disputas —
- * verificado contra el backend) cuando se implemente; riesgo declarado en el Artifact
- * PHA04TSK19-L01, mismo patrón que PUBLICACIONES_PENDIENTES_MOCK de PHA02TSK13.
- */
-const DISPUTAS_PENDIENTES_MOCK: DisputaPanel[] = [
-  {
-    id: 101,
-    precioSnapshot: 25000, // S/ 250.00 en centavos
-    estado: 'disputa'
-  },
-  {
-    id: 102,
-    precioSnapshot: 15000, // S/ 150.00 en centavos
-    estado: 'disputa'
-  }
-];
 
 /**
  * Devuelve el mensaje de éxito que se muestra tras resolver una disputa (Story 9, spec.md).
@@ -113,13 +97,12 @@ function chipDisputaClases(): string {
  * @returns Elemento JSX con el panel de disputas completo
  */
 export default function PanelDisputas({ disputasIniciales, rol }: PanelDisputasProps) {
-  const [disputas, setDisputas] = useState<DisputaPanel[]>(
-    disputasIniciales || DISPUTAS_PENDIENTES_MOCK
-  );
+  const [disputas, setDisputas] = useState<DisputaPanel[]>(disputasIniciales);
   const [motivos, setMotivos] = useState<{ [disputaId: number]: string }>({});
   const [errorMensaje, setErrorMensaje] = useState<string | null>(null);
   const [exitoMensaje, setExitoMensaje] = useState<string | null>(null);
   const [resolviendoId, setResolviendoId] = useState<number | null>(null);
+  const resolucionEnCurso = useRef(false);
 
   const esAdmin = rol === 'ADMIN';
 
@@ -128,8 +111,9 @@ export default function PanelDisputas({ disputasIniciales, rol }: PanelDisputasP
    *
    * @param disputaId ID de la transacción disputada
    * @param value texto del motivo
+   * @returns nada; actualiza el motivo local de la disputa
    */
-  const handleMotivoChange = (disputaId: number, value: string) => {
+  const handleMotivoChange = (disputaId: number, value: string): void => {
     setMotivos((prev) => ({ ...prev, [disputaId]: value }));
   };
 
@@ -141,13 +125,14 @@ export default function PanelDisputas({ disputasIniciales, rol }: PanelDisputasP
    *
    * @param disputaId ID de la transacción disputada (el {@code {id}} de la ruta)
    * @param decision decisión binaria: {@code A_FAVOR_VENDEDOR} o {@code A_FAVOR_COMPRADOR}
+   * @returns promesa completada cuando termina la petición y su actualización visible
    */
   const resolverDisputa = async (
     disputaId: number,
     decision: 'A_FAVOR_VENDEDOR' | 'A_FAVOR_COMPRADOR'
-  ) => {
-    // Guarda de reentrada: un doble clic rápido no dispara dos peticiones simultáneas.
-    if (resolviendoId !== null) {
+  ): Promise<void> => {
+    // La ref se actualiza sincrónicamente y cubre dos eventos dentro del mismo commit de React.
+    if (resolucionEnCurso.current) {
       return;
     }
 
@@ -161,6 +146,7 @@ export default function PanelDisputas({ disputasIniciales, rol }: PanelDisputasP
       return;
     }
 
+    resolucionEnCurso.current = true;
     setResolviendoId(disputaId);
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
@@ -188,15 +174,20 @@ export default function PanelDisputas({ disputasIniciales, rol }: PanelDisputasP
         });
         setExitoMensaje(mensajeExito(decision));
       }
-    } catch (err) {
+    } catch {
       setErrorMensaje('Error de red al conectar con el servidor');
     } finally {
+      resolucionEnCurso.current = false;
       setResolviendoId(null);
     }
   };
 
-  // Criterio del test previo análogo a la cancelación de TSK18: deshabilitado hasta que exista
-  // motivo de texto no vacío, y bloqueado mientras otra disputa está en vuelo.
+  /**
+   * Determina si una disputa tiene motivo no vacío y ninguna resolución está en vuelo.
+   *
+   * @param disputaId ID de la transacción disputada cuyo motivo se inspecciona
+   * @returns `true` cuando los controles de resolución pueden activarse
+   */
   const resolucionHabilitada = (disputaId: number): boolean =>
     resolviendoId === null && (motivos[disputaId] || '').trim().length > 0;
 
@@ -236,6 +227,7 @@ export default function PanelDisputas({ disputasIniciales, rol }: PanelDisputasP
                   <h2 className="text-lg font-semibold text-[#0F172A] tracking-tight">
                     Transacción en disputa <span className="font-mono">#{disputa.id}</span>
                   </h2>
+                  {disputa.publicacionDescripcion && <p className="mt-1 text-sm text-slate-700">{disputa.publicacionDescripcion}</p>}
                   <p className="text-sm text-slate-600 mt-1">
                     Monto:{' '}
                     <span className="font-mono font-medium text-[#0F172A]">

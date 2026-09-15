@@ -26,10 +26,9 @@
         "edit": "allow",
         "bash": {
           "*": "allow",
-          "git push*": "ask",
-          "git commit*": "ask",
           "rm -rf*": "deny",
-          "rm -r*": "ask"
+          "rm -r*": "ask",
+          "git*": "deny"
         }
       }
     },
@@ -41,10 +40,9 @@
         "edit": "allow",
         "bash": {
           "*": "allow",
-          "git push*": "ask",
-          "git commit*": "ask",
           "rm -rf*": "deny",
-          "rm -r*": "ask"
+          "rm -r*": "ask",
+          "git*": "deny"
         }
       }
     }

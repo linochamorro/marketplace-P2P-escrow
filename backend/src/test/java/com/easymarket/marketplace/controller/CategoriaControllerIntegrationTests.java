@@ -7,6 +7,7 @@ import com.easymarket.marketplace.model.Rol;
 import com.easymarket.marketplace.model.Subcategoria;
 import com.easymarket.marketplace.model.Usuario;
 import com.easymarket.marketplace.repository.CategoriaRepository;
+import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.PublicacionRepository;
 import com.easymarket.marketplace.repository.SubcategoriaRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
@@ -52,6 +54,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   <li>Rechazo con HTTP 409 Conflict ante duplicación de nombre.</li>
  * </ul>
  * </p>
+ *
+ * <p><strong>Política única de fixtures ADMIN (PHA12TSK06).</strong> Esta clase NO crea ninguna
+ * fila ADMIN: la limpieza de {@code @BeforeEach} conserva al único administrador provisionado
+ * por el contexto de test (seed V6 con {@code ADMIN_EMAIL}/{@code ADMIN_PASSWORD_HASH}, cuyo
+ * hash corresponde a la contraseña plana compartida {@code passwordRaw}) y los escenarios que
+ * necesitan iniciar sesión tras los gates {@code hasRole("ADMIN")} de {@code /categorias} lo
+ * hacen exclusivamente con esa identidad única, resuelta mediante {@link #obtenerAdminUnico()}.
+ * Motivo: {@code UsuarioRepository.findByRol(Rol.ADMIN)} es Optional por diseño (invariante de
+ * admin único, PHA06TSK02) y cualquier fixture con un ADMIN adicional rompe esa invariante.</p>
+ *
+ * <p><strong>Orden de limpieza del {@code setUp} (hardening preventivo PHA15TSK09, decisión de
+ * plan.md 2026-08-31, patrón PHA15TSK04-L07):</strong> las filas de {@code notificaciones} se
+ * eliminan PRIMERO porque referencian a {@code transacciones}
+ * ({@code fk_notificaciones_transaccion}, migración V14), a {@code publicaciones}
+ * ({@code fk_notificaciones_publicacion}, migración V20) y a {@code usuarios}
+ * ({@code fk_notificaciones_usuario}, migración V9), y ninguna otra tabla las referencia.
+ * Hardening preventivo: hoy ningún escenario de esta clase genera notificaciones, pero el orden
+ * evita una violación de FK en {@code setUp} si un cambio futuro las introduce.</p>
  */
 @SpringBootTest
 @Testcontainers
@@ -61,7 +81,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "spring.jpa.hibernate.ddl-auto=validate",
     "app.jwt.secret=clave-secreta-para-pruebas-de-integracion-categorias-admin-min-32-chars",
     "ADMIN_EMAIL=admin.seed@easymarket.com",
-    "ADMIN_PASSWORD_HASH=$2a$10$R9h/cIPz0gi.URNNXRkh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW"
+    "ADMIN_PASSWORD_HASH=$2a$10$ezbtTwVogv0lR8nXJuHRk.RGzMVbhLBUjDAt4zzBdJhbqR.U53k6u"
 })
 public class CategoriaControllerIntegrationTests {
 
@@ -89,12 +109,28 @@ public class CategoriaControllerIntegrationTests {
     private PublicacionRepository publicacionRepository;
 
     @Autowired
+    private NotificacionRepository notificacionRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
+
+    /** Email del ADMIN único provisionado por el contexto de test (propiedad {@code ADMIN_EMAIL}, seed V6). */
+    @Value("${ADMIN_EMAIL}")
+    private String adminEmail;
 
     private Usuario usuarioRegular;
     private Usuario usuarioAdmin;
     private final String passwordRaw = "PasswordSeguro123!";
 
+    /**
+     * Prepara MockMvc, limpia catálogo y usuarios de fixtures y repuebla el escenario: el usuario
+     * regular nace aquí; el ADMIN único es el provisionado por el seed V6, que sobrevive a la
+     * limpieza (política PHA12TSK06).
+     *
+     * <p>Desde PHA15TSK09 (decisión de plan.md 2026-08-31, patrón PHA15TSK04-L07) la limpieza
+     * arranca con {@code notificaciones} (FKs salientes V14/V20/V9, ninguna entrante) como
+     * primera sentencia, antes de {@code publicaciones}/{@code usuarios}.</p>
+     */
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
@@ -102,10 +138,16 @@ public class CategoriaControllerIntegrationTests {
                 .apply(springSecurity())
                 .build();
 
+        // Fix preventivo PHA15TSK09 (decisión de plan.md 2026-08-31, patrón PHA15TSK04-L07): las
+        // notificaciones referencian transacciones (fk_notificaciones_transaccion, V14),
+        // publicaciones (fk_notificaciones_publicacion, V20) y usuarios (V9), y ninguna tabla las
+        // referencia, por lo que se borran PRIMERO para no violar esas FKs si algún escenario
+        // llegara a crearlas.
+        notificacionRepository.deleteAll();
         publicacionRepository.deleteAll();
         subcategoriaRepository.deleteAll();
         categoriaRepository.deleteAll();
-        usuarioRepository.deleteAll();
+        eliminarUsuariosSalvoAdminUnico();
 
         usuarioRegular = new Usuario(
                 "usuario.regular@easymarket.com",
@@ -116,14 +158,33 @@ public class CategoriaControllerIntegrationTests {
         );
         usuarioRegular = usuarioRepository.save(usuarioRegular);
 
-        usuarioAdmin = new Usuario(
-                "admin.cat@easymarket.com",
-                passwordEncoder.encode(passwordRaw),
-                Rol.ADMIN,
-                0L,
-                ZonedDateTime.now(ZoneId.of("America/Lima"))
-        );
-        usuarioAdmin = usuarioRepository.save(usuarioAdmin);
+        // ADMIN único provisionado por el contexto (seed V6); ningún fixture crea ADMIN (PHA12TSK06)
+        usuarioAdmin = obtenerAdminUnico();
+    }
+
+    /**
+     * Elimina los usuarios de fixtures conservando únicamente las filas con rol {@code ADMIN}
+     * (política PHA12TSK06): el ADMIN único provisionado por el seed V6 sobrevive a cada limpieza
+     * para que los gates {@code hasRole("ADMIN")} se autentiquen con él sin que ningún fixture
+     * cree filas ADMIN nuevas.
+     */
+    private void eliminarUsuariosSalvoAdminUnico() {
+        usuarioRepository.findAll().stream()
+                .filter(usuario -> usuario.getRol() != Rol.ADMIN)
+                .forEach(usuarioRepository::delete);
+    }
+
+    /**
+     * Resuelve la identidad persistida del ADMIN único provisionado por el contexto de test
+     * (seed V6, email leído de la propiedad {@code ADMIN_EMAIL}).
+     *
+     * @return la entidad persistida del único administrador
+     * @throws IllegalStateException si el admin sembrado no está presente (provisión de datos inconsistente)
+     */
+    private Usuario obtenerAdminUnico() {
+        return usuarioRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new IllegalStateException(
+                        "El ADMIN único provisionado por el contexto (" + adminEmail + ") no está presente"));
     }
 
     private Cookie obtenerCookieJwtPostLogin(String email, String password) throws Exception {

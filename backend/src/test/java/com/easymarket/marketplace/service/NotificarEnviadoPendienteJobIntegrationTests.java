@@ -177,7 +177,7 @@ class NotificarEnviadoPendienteJobIntegrationTests {
         Usuario comprador = usuarioRepository.save(new Usuario("comprador-aviso-" + sufijo + "@example.com", "hash", Rol.USUARIO, 0L, ahoraPeru));
         Categoria categoria = categoriaRepository.save(new Categoria("Categoría aviso " + sufijo));
         Subcategoria subcategoria = subcategoriaRepository.save(new Subcategoria(categoria, "Subcategoría aviso " + sufijo));
-        Publicacion publicacion = publicacionService.crearPublicacion(vendedor.getId(), categoria.getId(), subcategoria.getId(), 12_345L, 1, "Publicación para aviso pendiente");
+        Publicacion publicacion = publicacionService.crearPublicacion(vendedor.getId(), categoria.getId(), subcategoria.getId(), 12_345L, 1, "Publicación para aviso pendiente", null);
         publicacionService.cambiarEstado(publicacion.getId(), EstadoPublicacion.APROBADA, null);
         return transaccionRepository.saveAndFlush(new Transaccion(comprador, publicacion, 12_345L, fechaReservada));
     }

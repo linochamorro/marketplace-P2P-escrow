@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Min;
  * @param precio nuevo precio en centavos (monto entero > 0 si se proporciona)
  * @param stock nuevo stock disponible (entero >= 0 si se proporciona)
  * @param descripcion nueva descripción del producto
+ * @param imagenFilename nuevo nombre de archivo de imagen (sin prefijo de URL); opcional (PHA09TSK04)
  */
 public record EditarPublicacionRequestDto(
         @Min(value = 1, message = "El precio debe ser un monto entero positivo mayor a cero")
@@ -18,6 +19,8 @@ public record EditarPublicacionRequestDto(
         @Min(value = 0, message = "El stock no puede ser negativo")
         Integer stock,
 
-        String descripcion
+        String descripcion,
+
+        String imagenFilename
 ) {
 }

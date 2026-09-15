@@ -1,0 +1,17 @@
+-- V23__allow_null_transaccion_in_stripe_refund_outbox.sql
+-- Migración para PHA16TSK01 (plan.md, sección "PHA16 — Estabilización de producción y
+-- seguridad", fila "Esquema de la outbox (V23)"; informe de auditoría 2026-09-13, hallazgo A1
+-- crítico; Story 5 de spec.md: perdedor de la carrera de stock).
+--
+-- La orden durable de reembolso del pago que pierde la carrera de stock no tiene transacción
+-- asociada (el decremento condicional de stock falló y no se creó ninguna), por lo que la
+-- columna transaccion_id debe admitir NULL. Las constraints nombradas en V12 se conservan
+-- intactas: uq_stripe_refund_outbox_transaccion (UNIQUE) y fk_stripe_refund_outbox_transaccion
+-- (FK a transacciones). PostgreSQL admite múltiples NULL en una columna UNIQUE, de modo que
+-- sigue habiendo como máximo una orden por transacción no nula y ahora también órdenes sin
+-- transacción. Sin columnas ni tablas nuevas.
+--
+-- La tabla sigue mutable operativamente (V12, sin trigger append-only): el procesador
+-- posterior actualiza estado, contador, error y timestamp. El evento canónico de negocio
+-- permanece en transaccion_eventos (V10, append-only).
+ALTER TABLE stripe_refund_outbox ALTER COLUMN transaccion_id DROP NOT NULL;

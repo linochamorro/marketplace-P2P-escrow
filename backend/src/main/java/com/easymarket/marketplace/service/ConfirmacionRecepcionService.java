@@ -27,8 +27,10 @@ import java.util.Objects;
  * <p>Solo el comprador puede confirmar una transacción {@code entregado} dentro de las 48 horas
  * desde {@code fecha_entregado}. Bajo una única transacción bloquea la transacción, acredita el
  * saldo cacheado del vendedor con el precio snapshot entero, inserta el movimiento append-only y
- * registra la transición {@code entregado -> recibido}. No modifica stock: PHA03 ya lo descontó
- * al reservar.</p>
+ * registra la transición {@code entregado -> recibido}. Desde PHA12TSK03 (recuperación de
+ * PHA09TSK05) emite además, en esa misma transacción, la notificación accionable
+ * COMPRA_CONFIRMADA al comprador y al vendedor con mensajes dirigidos ("tu compra"/"tu venta")
+ * que la UI enruta. No modifica stock: PHA03 ya lo descontó al reservar.</p>
  */
 @Service
 public class ConfirmacionRecepcionService {
@@ -37,6 +39,7 @@ public class ConfirmacionRecepcionService {
     private final UsuarioRepository usuarioRepository;
     private final MovimientoSaldoRepository movimientoSaldoRepository;
     private final TransaccionEventoRepository transaccionEventoRepository;
+    private final NotificacionService notificacionService;
     private final Clock clock;
 
     /**
@@ -46,14 +49,16 @@ public class ConfirmacionRecepcionService {
      * @param usuarioRepository repositorio que incrementa atómicamente el saldo cacheado
      * @param movimientoSaldoRepository repositorio que inserta el movimiento de saldo
      * @param transaccionEventoRepository repositorio que inserta la auditoría de transición
+     * @param notificacionService servicio de dominio para notificaciones accionables (PHA09TSK05)
      */
     @Autowired
     public ConfirmacionRecepcionService(TransaccionRepository transaccionRepository,
                                         UsuarioRepository usuarioRepository,
                                         MovimientoSaldoRepository movimientoSaldoRepository,
-                                        TransaccionEventoRepository transaccionEventoRepository) {
+                                        TransaccionEventoRepository transaccionEventoRepository,
+                                        NotificacionService notificacionService) {
         this(transaccionRepository, usuarioRepository, movimientoSaldoRepository,
-            transaccionEventoRepository, Clock.systemUTC());
+            transaccionEventoRepository, notificacionService, Clock.systemUTC());
     }
 
     /**
@@ -63,15 +68,18 @@ public class ConfirmacionRecepcionService {
      * @param usuarioRepository repositorio que incrementa atómicamente el saldo cacheado
      * @param movimientoSaldoRepository repositorio que inserta el movimiento de saldo
      * @param transaccionEventoRepository repositorio que inserta la auditoría de transición
+     * @param notificacionService servicio de dominio para notificaciones accionables (PHA09TSK05)
      * @param clock reloj que provee el instante actual
      */
     ConfirmacionRecepcionService(TransaccionRepository transaccionRepository, UsuarioRepository usuarioRepository,
                                  MovimientoSaldoRepository movimientoSaldoRepository,
-                                 TransaccionEventoRepository transaccionEventoRepository, Clock clock) {
+                                 TransaccionEventoRepository transaccionEventoRepository,
+                                 NotificacionService notificacionService, Clock clock) {
         this.transaccionRepository = transaccionRepository;
         this.usuarioRepository = usuarioRepository;
         this.movimientoSaldoRepository = movimientoSaldoRepository;
         this.transaccionEventoRepository = transaccionEventoRepository;
+        this.notificacionService = notificacionService;
         this.clock = clock;
     }
 
@@ -80,8 +88,9 @@ public class ConfirmacionRecepcionService {
      *
      * <p>La frontera de 48 horas es inclusiva: se permite confirmar cuando {@code ahora} coincide
      * exactamente con {@code fecha_entregado + 48h}; se rechaza solo después. Cualquier excepción
-     * de persistencia, incluido un fallo al insertar el movimiento, revierte el crédito, la
-     * transición y el evento por la transacción de Spring.</p>
+     * de persistencia, incluido un fallo al insertar el movimiento o al emitir las notificaciones
+     * accionables COMPRA_CONFIRMADA, revierte el crédito, la transición, el evento y los avisos
+     * por la transacción de Spring.</p>
      *
      * @param transaccionId ID de la transacción entregada
      * @param actorId ID del comprador que confirma la recepción
@@ -124,6 +133,21 @@ public class ConfirmacionRecepcionService {
         movimientoSaldoRepository.save(new MovimientoSaldo(persistida, vendedor, monto, ahora));
         transaccionEventoRepository.save(new TransaccionEvento(persistida, transaccion.getComprador(),
             EstadoTransaccion.ENTREGADO, EstadoTransaccion.RECIBIDO, null, ahora));
+
+        // Notificaciones accionables a comprador y vendedor (PHA09TSK05, recuperado en PHA12TSK03),
+        // emitidas dentro de la misma transacción que la transición (constitution, principio 1).
+        notificacionService.crearNotificacionUsuario(
+            transaccion.getComprador(),
+            "COMPRA_CONFIRMADA",
+            "Confirmaste la recepción de tu compra #" + persistida.getId(),
+            persistida,
+            ahora);
+        notificacionService.crearNotificacionUsuario(
+            vendedor,
+            "COMPRA_CONFIRMADA",
+            "El comprador confirmó la recepción de tu venta #" + persistida.getId() + "; el saldo fue acreditado",
+            persistida,
+            ahora);
         return persistida;
     }
 }

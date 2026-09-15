@@ -1,7 +1,10 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+﻿import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import PanelCategorias from './PanelCategorias';
 import EditarPublicacionForm from './EditarPublicacionForm';
+
+/** Árbol inyectado para conservar las regresiones sin depender de mocks de producción. */
+const CATEGORIAS = [{ id: 1, nombre: 'Electrónica', subcategorias: [{ id: 101, nombre: 'Smartphones' }] }];
 
 /**
  * @file PHA02TSK14.test.tsx
@@ -40,7 +43,7 @@ describe('PHA02TSK14 - Parte A: PanelCategorias', () => {
     });
     global.fetch = fetchMock;
 
-    render(<PanelCategorias />);
+    render(<PanelCategorias categoriasIniciales={CATEGORIAS} />);
 
     const nombreInput = screen.getByLabelText(/nombre de la nueva categoría/i);
     const submitBtn = screen.getByRole('button', { name: /crear categoría/i });
@@ -70,9 +73,9 @@ describe('PHA02TSK14 - Parte A: PanelCategorias', () => {
     });
     global.fetch = fetchMock;
 
-    render(<PanelCategorias />);
+    render(<PanelCategorias categoriasIniciales={CATEGORIAS} />);
 
-    const eliminarBtn = screen.getAllByRole('button', { name: /eliminar/i })[0];
+    const eliminarBtn = screen.getByRole('button', { name: /eliminar categoría Electrónica/i });
     fireEvent.click(eliminarBtn);
 
     expect(await screen.findByText(/No se puede eliminar la categoría porque tiene publicaciones asociadas/i)).toBeInTheDocument();
@@ -92,7 +95,8 @@ describe('PHA02TSK14 - Parte B: EditarPublicacionForm', () => {
     precio: 20000, // $200.00
     stock: 10,
     descripcion: 'Teléfono celular en perfectas condiciones',
-    estado: 'APROBADA'
+    estado: 'APROBADA',
+    imagenFilename: ''
   };
 
   beforeEach(() => {
@@ -153,7 +157,8 @@ describe('PHA02TSK14 - Parte B: EditarPublicacionForm', () => {
         body: JSON.stringify({
           precio: 18000,
           stock: 8,
-          descripcion: 'Teléfono celular con descuento'
+          descripcion: 'Teléfono celular con descuento',
+          imagenFilename: ''
         })
       });
     });
@@ -178,3 +183,4 @@ describe('PHA02TSK14 - Parte B: EditarPublicacionForm', () => {
     expect(await screen.findByText(/EstadoPublicacionNoEditableException/i)).toBeInTheDocument();
   });
 });
+

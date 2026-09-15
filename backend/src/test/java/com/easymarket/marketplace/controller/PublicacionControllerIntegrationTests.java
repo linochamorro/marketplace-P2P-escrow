@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
@@ -38,6 +39,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -56,6 +58,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   <li>Rechazo con HTTP 400 Bad Request si la subcategoría no pertenece a la categoría raíz indicada.</li>
  * </ul>
  * </p>
+ *
+ * <p>La clase cubre además los endpoints de listado por estado, moderación y
+ * {@code GET /publicaciones/mias} de las Stories 2 y 3.</p>
+ *
+ * <p><strong>Política única de fixtures ADMIN (PHA12TSK06).</strong> Esta clase NO crea ninguna
+ * fila ADMIN: la limpieza de {@code @BeforeEach} conserva al único administrador provisionado
+ * por el contexto de test (seed V6 con {@code ADMIN_EMAIL}/{@code ADMIN_PASSWORD_HASH}, cuyo
+ * hash corresponde a la contraseña plana compartida {@code passwordRaw}) y TODOS los escenarios
+ * que necesitan iniciar sesión tras un gate {@code hasRole("ADMIN")} — moderación,
+ * {@code GET /publicaciones?estado=PENDIENTE_REVISION}, {@code /publicaciones/mias} vacío — lo
+ * hacen exclusivamente con esa identidad única, resuelta mediante {@link #obtenerAdminUnico()}.
+ * Antes de esta política los cuatro escenarios de moderación creaban cada uno su propio ADMIN
+ * adicional sobre el del {@code setUp}, acumulando hasta tres ADMIN simultáneos en la base del
+ * contexto — exactamente la condición que hace explotar a
+ * {@code NotificacionService.crearNotificacionAdmin} ({@code findByRol(Rol.ADMIN)}, Optional por
+ * diseño, PHA06TSK02) ante cualquier flujo exitoso que emita una notificación al admin.</p>
  */
 @SpringBootTest
 @Testcontainers
@@ -65,7 +83,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "spring.jpa.hibernate.ddl-auto=validate",
     "app.jwt.secret=clave-secreta-para-pruebas-de-integracion-publicaciones-min-32-chars",
     "ADMIN_EMAIL=admin.seed@easymarket.com",
-    "ADMIN_PASSWORD_HASH=$2a$10$R9h/cIPz0gi.URNNXRkh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW"
+    "ADMIN_PASSWORD_HASH=$2a$10$ezbtTwVogv0lR8nXJuHRk.RGzMVbhLBUjDAt4zzBdJhbqR.U53k6u"
 })
 public class PublicacionControllerIntegrationTests {
 
@@ -102,6 +120,10 @@ public class PublicacionControllerIntegrationTests {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    /** Email del ADMIN único provisionado por el contexto de test (propiedad {@code ADMIN_EMAIL}, seed V6). */
+    @Value("${ADMIN_EMAIL}")
+    private String adminEmail;
+
     private Usuario usuarioRegular;
     private Usuario usuarioAdmin;
     private Categoria categoriaVehiculos;
@@ -115,7 +137,9 @@ public class PublicacionControllerIntegrationTests {
      *
      * <p>Antes de recrear los datos padre, vacía las proyecciones y auditorías de fixture mediante
      * {@link #limpiarFixturesAppendOnly()} para que las FKs de los efectos creados por Story 1 no
-     * interfieran con otro caso. Esta limpieza existe exclusivamente en Testcontainers.</p>
+     * interfieran con otro caso. Esta limpieza existe exclusivamente en Testcontainers. El ADMIN
+     * único del seed V6 sobrevive a la limpieza (política PHA12TSK06) y se resuelve como
+     * {@code usuarioAdmin}; ningún fixture crea filas ADMIN.</p>
      */
     @BeforeEach
     void setUp() {
@@ -129,7 +153,7 @@ public class PublicacionControllerIntegrationTests {
         publicacionRepository.deleteAll();
         subcategoriaRepository.deleteAll();
         categoriaRepository.deleteAll();
-        usuarioRepository.deleteAll();
+        eliminarUsuariosSalvoAdminUnico();
 
         usuarioRegular = new Usuario(
                 "vendedor.prueba@easymarket.com",
@@ -140,21 +164,39 @@ public class PublicacionControllerIntegrationTests {
         );
         usuarioRegular = usuarioRepository.save(usuarioRegular);
 
-        // Admin user (rol ADMIN) para tests de endpoints protegidos
-        usuarioAdmin = new Usuario(
-                "admin.test.publicacion@easymarket.com",
-                passwordEncoder.encode(passwordRaw),
-                Rol.ADMIN,
-                0L,
-                ZonedDateTime.now(ZoneId.of("America/Lima"))
-        );
-        usuarioAdmin = usuarioRepository.save(usuarioAdmin);
+        // ADMIN único provisionado por el contexto (seed V6); ningún fixture crea ADMIN (PHA12TSK06)
+        usuarioAdmin = obtenerAdminUnico();
 
         categoriaVehiculos = categoriaRepository.save(new Categoria("Vehículos"));
         subcategoriaAutos = subcategoriaRepository.save(new Subcategoria(categoriaVehiculos, "Autos"));
 
         Categoria categoriaElectronica = categoriaRepository.save(new Categoria("Electrónica"));
         subcategoriaMotosCatIncompatible = subcategoriaRepository.save(new Subcategoria(categoriaElectronica, "Smartphones"));
+    }
+
+    /**
+     * Elimina los usuarios de fixtures conservando únicamente las filas con rol {@code ADMIN}
+     * (política PHA12TSK06): el ADMIN único provisionado por el seed V6 sobrevive a cada limpieza
+     * para que los gates {@code hasRole("ADMIN")} se autentiquen con él sin que ningún fixture
+     * cree filas ADMIN nuevas.
+     */
+    private void eliminarUsuariosSalvoAdminUnico() {
+        usuarioRepository.findAll().stream()
+                .filter(usuario -> usuario.getRol() != Rol.ADMIN)
+                .forEach(usuarioRepository::delete);
+    }
+
+    /**
+     * Resuelve la identidad persistida del ADMIN único provisionado por el contexto de test
+     * (seed V6, email leído de la propiedad {@code ADMIN_EMAIL}).
+     *
+     * @return la entidad persistida del único administrador
+     * @throws IllegalStateException si el admin sembrado no está presente (provisión de datos inconsistente)
+     */
+    private Usuario obtenerAdminUnico() {
+        return usuarioRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new IllegalStateException(
+                        "El ADMIN único provisionado por el contexto (" + adminEmail + ") no está presente"));
     }
 
     /**
@@ -166,7 +208,7 @@ public class PublicacionControllerIntegrationTests {
      * {@code notificaciones} y PostgreSQL exige truncar juntas las tablas relacionadas.</p>
      */
     private void limpiarFixturesAppendOnly() {
-        jdbcTemplate.execute("TRUNCATE TABLE publicacion_eventos, avisos_envio_pendiente, notificaciones RESTART IDENTITY");
+        jdbcTemplate.execute("TRUNCATE TABLE publicacion_eventos, publicacion_motivos_historicos, avisos_envio_pendiente, notificaciones RESTART IDENTITY");
     }
 
     /**
@@ -223,6 +265,7 @@ public class PublicacionControllerIntegrationTests {
                         ))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.codigoProducto").exists())
                 .andExpect(jsonPath("$.precio").value(2500000L))
                 .andExpect(jsonPath("$.stock").value(3))
                 .andExpect(jsonPath("$.estado").value("PENDIENTE_REVISION"))
@@ -330,15 +373,6 @@ public class PublicacionControllerIntegrationTests {
     @Test
     @DisplayName("PATCH /publicaciones/{id}/moderar por ADMIN aprueba publicación correctamente (200 OK) y registra auditoría admin_acciones")
     void moderarPublicacion_AdminAprobar_Retorna200OKYRegistraAuditoria() throws Exception {
-        // Usuario Admin real sembrado o creado
-        Usuario admin = usuarioRepository.save(new Usuario(
-                "admin.modera@easymarket.com",
-                passwordEncoder.encode(passwordRaw),
-                Rol.ADMIN,
-                0L,
-                ZonedDateTime.now(ZoneId.of("America/Lima"))
-        ));
-
         com.easymarket.marketplace.model.Publicacion publicacion = publicacionRepository.save(
                 new com.easymarket.marketplace.model.Publicacion(
                         usuarioRegular,
@@ -350,7 +384,7 @@ public class PublicacionControllerIntegrationTests {
                 )
         );
 
-        Cookie cookieAdmin = obtenerCookieJwtPostLogin(admin.getEmail(), passwordRaw);
+        Cookie cookieAdmin = obtenerCookieJwtPostLogin(usuarioAdmin.getEmail(), passwordRaw);
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/publicaciones/" + publicacion.getId() + "/moderar")
                         .cookie(cookieAdmin)
@@ -371,14 +405,6 @@ public class PublicacionControllerIntegrationTests {
     @Test
     @DisplayName("PATCH /publicaciones/{id}/moderar por ADMIN solicita cambios con motivo (200 OK)")
     void moderarPublicacion_AdminSolicitarCambiosConMotivo_Retorna200OK() throws Exception {
-        Usuario admin = usuarioRepository.save(new Usuario(
-                "admin.modera2@easymarket.com",
-                passwordEncoder.encode(passwordRaw),
-                Rol.ADMIN,
-                0L,
-                ZonedDateTime.now(ZoneId.of("America/Lima"))
-        ));
-
         com.easymarket.marketplace.model.Publicacion publicacion = publicacionRepository.save(
                 new com.easymarket.marketplace.model.Publicacion(
                         usuarioRegular,
@@ -390,7 +416,7 @@ public class PublicacionControllerIntegrationTests {
                 )
         );
 
-        Cookie cookieAdmin = obtenerCookieJwtPostLogin(admin.getEmail(), passwordRaw);
+        Cookie cookieAdmin = obtenerCookieJwtPostLogin(usuarioAdmin.getEmail(), passwordRaw);
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/publicaciones/" + publicacion.getId() + "/moderar")
                         .cookie(cookieAdmin)
@@ -406,14 +432,6 @@ public class PublicacionControllerIntegrationTests {
     @Test
     @DisplayName("PATCH /publicaciones/{id}/moderar sin motivo en solicitar-cambios retorna 400 Bad Request")
     void moderarPublicacion_AdminSolicitarCambiosSinMotivo_Retorna400BadRequest() throws Exception {
-        Usuario admin = usuarioRepository.save(new Usuario(
-                "admin.modera3@easymarket.com",
-                passwordEncoder.encode(passwordRaw),
-                Rol.ADMIN,
-                0L,
-                ZonedDateTime.now(ZoneId.of("America/Lima"))
-        ));
-
         com.easymarket.marketplace.model.Publicacion publicacion = publicacionRepository.save(
                 new com.easymarket.marketplace.model.Publicacion(
                         usuarioRegular,
@@ -425,7 +443,7 @@ public class PublicacionControllerIntegrationTests {
                 )
         );
 
-        Cookie cookieAdmin = obtenerCookieJwtPostLogin(admin.getEmail(), passwordRaw);
+        Cookie cookieAdmin = obtenerCookieJwtPostLogin(usuarioAdmin.getEmail(), passwordRaw);
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/publicaciones/" + publicacion.getId() + "/moderar")
                         .cookie(cookieAdmin)
@@ -439,14 +457,6 @@ public class PublicacionControllerIntegrationTests {
     @Test
     @DisplayName("PATCH /publicaciones/{id}/moderar cuando la publicación no está pendiente_revisión retorna 409 Conflict")
     void moderarPublicacion_EstadoNoPendienteRevision_Retorna409Conflict() throws Exception {
-        Usuario admin = usuarioRepository.save(new Usuario(
-                "admin.modera4@easymarket.com",
-                passwordEncoder.encode(passwordRaw),
-                Rol.ADMIN,
-                0L,
-                ZonedDateTime.now(ZoneId.of("America/Lima"))
-        ));
-
         com.easymarket.marketplace.model.Publicacion publicacion = publicacionRepository.save(
                 new com.easymarket.marketplace.model.Publicacion(
                         usuarioRegular,
@@ -460,7 +470,7 @@ public class PublicacionControllerIntegrationTests {
         publicacion.setEstado(com.easymarket.marketplace.model.EstadoPublicacion.APROBADA);
         publicacionRepository.save(publicacion);
 
-        Cookie cookieAdmin = obtenerCookieJwtPostLogin(admin.getEmail(), passwordRaw);
+        Cookie cookieAdmin = obtenerCookieJwtPostLogin(usuarioAdmin.getEmail(), passwordRaw);
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/publicaciones/" + publicacion.getId() + "/moderar")
                         .cookie(cookieAdmin)
@@ -538,6 +548,58 @@ public class PublicacionControllerIntegrationTests {
                 .andExpect(jsonPath("$.estado").value("APROBADA"));
     }
 
+    /**
+     * Verifica que el dueño pueda editar los campos permitidos de una publicación pendiente mediante el contrato HTTP.
+     *
+     * <p>La respuesta conserva el estado de moderación y las referencias de categoría, y propaga
+     * {@code imagenFilename} junto con precio, stock y descripción.</p>
+     *
+     * @throws Exception si MockMvc no puede completar la solicitud autenticada
+     */
+    @Test
+    @DisplayName("PATCH /publicaciones/{id} por dueño edita publicación PENDIENTE_REVISION y conserva estado y categorías")
+    void editarPublicacion_DuenioPendienteRevision_Retorna200ConCamposPermitidos() throws Exception {
+        Publicacion publicacion = publicacionRepository.save(new Publicacion(
+                usuarioRegular,
+                categoriaVehiculos,
+                subcategoriaAutos,
+                100000L,
+                5,
+                "Descripción pendiente"
+        ));
+
+        Cookie cookieDuenio = obtenerCookieJwtPostLogin(usuarioRegular.getEmail(), passwordRaw);
+
+        mockMvc.perform(patch("/publicaciones/" + publicacion.getId())
+                        .cookie(cookieDuenio)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "precio", 150000L,
+                                "stock", 3,
+                                "descripcion", "Descripción pendiente editada",
+                                "imagenFilename", "producto-pendiente.jpg"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.precio").value(150000L))
+                .andExpect(jsonPath("$.stock").value(3))
+                .andExpect(jsonPath("$.descripcion").value("Descripción pendiente editada"))
+                .andExpect(jsonPath("$.imagenFilename").value("producto-pendiente.jpg"))
+                .andExpect(jsonPath("$.estado").value("PENDIENTE_REVISION"))
+                 .andExpect(jsonPath("$.categoriaId").value(categoriaVehiculos.getId()))
+                 .andExpect(jsonPath("$.subcategoriaId").value(subcategoriaAutos.getId()))
+                 .andExpect(jsonPath("$.usuarioId").value(usuarioRegular.getId()));
+
+         Publicacion persistida = publicacionRepository.findById(publicacion.getId()).orElseThrow();
+         assertThat(persistida.getPrecio()).isEqualTo(150000L);
+         assertThat(persistida.getStock()).isEqualTo(3);
+         assertThat(persistida.getDescripcion()).isEqualTo("Descripción pendiente editada");
+         assertThat(persistida.getImagenFilename()).isEqualTo("producto-pendiente.jpg");
+         assertThat(persistida.getEstado()).isEqualTo(EstadoPublicacion.PENDIENTE_REVISION);
+         assertThat(persistida.getUsuario().getId()).isEqualTo(usuarioRegular.getId());
+         assertThat(persistida.getCategoria().getId()).isEqualTo(categoriaVehiculos.getId());
+         assertThat(persistida.getSubcategoria().getId()).isEqualTo(subcategoriaAutos.getId());
+     }
+
     @Test
     @DisplayName("PATCH /publicaciones/{id} cuando stock se edita a 0 transiciona automáticamente a OCULTA (Story 10)")
     void editarPublicacion_StockCero_TransicionaAEstadoOculta() throws Exception {
@@ -568,7 +630,7 @@ public class PublicacionControllerIntegrationTests {
     }
 
     @Test
-    @DisplayName("PATCH /publicaciones/{id} en estado no APROBADA retorna 409 Conflict")
+    @DisplayName("PATCH /publicaciones/{id} en estado CAMBIOS_SOLICITADOS retorna 409 Conflict")
     void editarPublicacion_EstadoNoAprobada_Retorna409Conflict() throws Exception {
         com.easymarket.marketplace.model.Publicacion publicacion = publicacionRepository.save(
                 new com.easymarket.marketplace.model.Publicacion(
@@ -579,7 +641,9 @@ public class PublicacionControllerIntegrationTests {
                         5,
                         "Producto pendiente"
                 )
-        ); // Estado por defecto PENDIENTE_REVISION
+        );
+        publicacion.setEstado(EstadoPublicacion.CAMBIOS_SOLICITADOS);
+        publicacionRepository.save(publicacion);
 
         Cookie cookieDuenio = obtenerCookieJwtPostLogin(usuarioRegular.getEmail(), passwordRaw);
 
@@ -860,5 +924,72 @@ public class PublicacionControllerIntegrationTests {
     void listarPorUsuario_SinAutenticacion_Retorna403() throws Exception {
         mockMvc.perform(get("/publicaciones/mias"))
                 .andExpect(status().isForbidden());
+    }
+
+    // =========================================================================
+    // PHA15TSK01 - Tests Red phase para imagenFilename en creación (integración)
+    // =========================================================================
+
+    /**
+     * Verifica que POST /publicaciones acepte y devuelva imagenFilename en la respuesta
+     * (PHA15TSK01: habilitar campo imagenFilename en creación).
+     * Este test DEBE FALLAR en Red phase porque el DTO/request no incluye imagenFilename.
+     */
+    @Test
+    @DisplayName("POST /publicaciones con imagenFilename retorna 201 y devuelve imagenFilename en la respuesta")
+    void crearPublicacion_ConImagenFilename_Retorna201ConImagenFilename() throws Exception {
+        Cookie cookieVendedor = obtenerCookieJwtPostLogin(usuarioRegular.getEmail(), passwordRaw);
+
+        mockMvc.perform(post("/publicaciones")
+                        .cookie(cookieVendedor)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "precio", 2500000L,
+                                "stock", 3,
+                                "categoriaId", categoriaVehiculos.getId(),
+                                "subcategoriaId", subcategoriaAutos.getId(),
+                                "descripcion", "Toyota Corolla 2022 seminuevo",
+                                "imagenFilename", "toyota-corolla.jpg"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.precio").value(2500000L))
+                .andExpect(jsonPath("$.stock").value(3))
+                .andExpect(jsonPath("$.estado").value("PENDIENTE_REVISION"))
+                .andExpect(jsonPath("$.descripcion").value("Toyota Corolla 2022 seminuevo"))
+                .andExpect(jsonPath("$.categoriaId").value(categoriaVehiculos.getId()))
+                .andExpect(jsonPath("$.subcategoriaId").value(subcategoriaAutos.getId()))
+                .andExpect(jsonPath("$.usuarioId").value(usuarioRegular.getId()))
+                .andExpect(jsonPath("$.imagenFilename").value("toyota-corolla.jpg"));
+
+        assertThat(publicacionRepository.count()).isEqualTo(1);
+        assertThat(publicacionRepository.findAll().get(0).getImagenFilename()).isEqualTo("toyota-corolla.jpg");
+    }
+
+    /**
+     * Verifica que POST /publicaciones sin imagenFilename (null/ausente) funcione correctamente
+     * y devuelva null en imagenFilename.
+     */
+    @Test
+    @DisplayName("POST /publicaciones sin imagenFilename retorna 201 con imagenFilename null")
+    void crearPublicacion_SinImagenFilename_Retorna201ConImagenFilenameNull() throws Exception {
+        Cookie cookieVendedor = obtenerCookieJwtPostLogin(usuarioRegular.getEmail(), passwordRaw);
+
+        mockMvc.perform(post("/publicaciones")
+                        .cookie(cookieVendedor)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "precio", 1500000L,
+                                "stock", 1,
+                                "categoriaId", categoriaVehiculos.getId(),
+                                "subcategoriaId", subcategoriaAutos.getId(),
+                                "descripcion", "Auto sin imagen"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.imagenFilename").doesNotExist());
+
+        assertThat(publicacionRepository.count()).isEqualTo(1);
+        assertThat(publicacionRepository.findAll().get(0).getImagenFilename()).isNull();
     }
 }

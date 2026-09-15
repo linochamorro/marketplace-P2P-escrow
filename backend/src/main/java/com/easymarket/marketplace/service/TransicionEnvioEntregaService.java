@@ -21,25 +21,33 @@ import java.util.Objects;
  * <p>Permite únicamente al vendedor dueño de la publicación avanzar una transacción por la ruta
  * {@code reservada -> enviado -> entregado}. Cada actualización de estado, su timestamp y el
  * evento de auditoría append-only se persisten en una única transacción. Al marcar entregado
- * también persiste la prueba de entrega opcional de la Story 6b. No implementa recepción,
- * movimientos de saldo, reclamos, cancelaciones, jobs ni endpoints.</p>
+ * también persiste la prueba de entrega opcional de la Story 6b. Desde PHA12TSK03 (recuperación
+ * de PHA09TSK05) cada transición exitosa emite, dentro de esa misma transacción, las
+ * notificaciones accionables ENVIO_MARCADO o ENTREGA_MARCADA al comprador y al vendedor con
+ * mensajes dirigidos ("tu compra"/"tu venta") que la UI enruta a la gestión correspondiente.
+ * No implementa recepción, movimientos de saldo, reclamos, cancelaciones, jobs ni endpoints.</p>
  */
 @Service
 public class TransicionEnvioEntregaService {
 
     private final TransaccionRepository transaccionRepository;
     private final TransaccionEventoRepository transaccionEventoRepository;
+    private final NotificacionService notificacionService;
 
     /**
-     * Construye el servicio con los repositorios de la transacción y su auditoría append-only.
+     * Construye el servicio con los repositorios de la transacción, su auditoría append-only y el
+     * servicio de notificaciones accionables.
      *
      * @param transaccionRepository repositorio de transacciones a transicionar
      * @param transaccionEventoRepository repositorio que inserta eventos de auditoría
+     * @param notificacionService servicio de dominio para notificaciones accionables (PHA09TSK05)
      */
     public TransicionEnvioEntregaService(TransaccionRepository transaccionRepository,
-                                         TransaccionEventoRepository transaccionEventoRepository) {
+                                         TransaccionEventoRepository transaccionEventoRepository,
+                                         NotificacionService notificacionService) {
         this.transaccionRepository = transaccionRepository;
         this.transaccionEventoRepository = transaccionEventoRepository;
+        this.notificacionService = notificacionService;
     }
 
     /**
@@ -87,7 +95,8 @@ public class TransicionEnvioEntregaService {
     }
 
     /**
-     * Ejecuta una única transición de envío o entrega, junto con su evento append-only.
+     * Ejecuta una única transición de envío o entrega, junto con su evento append-only y las
+     * notificaciones accionables a comprador y vendedor.
      *
      * @param transaccionId ID de la transacción a actualizar
      * @param actorId ID del vendedor que solicita el cambio
@@ -130,6 +139,37 @@ public class TransicionEnvioEntregaService {
         Transaccion persistida = transaccionRepository.save(transaccion);
         transaccionEventoRepository.save(new TransaccionEvento(
             persistida, vendedor, estadoEsperado, estadoDestino, null, ahora));
+
+        // Notificaciones accionables a comprador y vendedor (PHA09TSK05, recuperado en PHA12TSK03),
+        // emitidas dentro de la misma transacción que la transición (constitution, principio 1).
+        if (estadoDestino == EstadoTransaccion.ENVIADO) {
+            notificacionService.crearNotificacionUsuario(
+                persistida.getComprador(),
+                "ENVIO_MARCADO",
+                "El vendedor marcó tu compra #" + persistida.getId() + " como enviada",
+                persistida,
+                ahora);
+            notificacionService.crearNotificacionUsuario(
+                vendedor,
+                "ENVIO_MARCADO",
+                "Marcaste tu venta #" + persistida.getId() + " como enviada",
+                persistida,
+                ahora);
+        } else {
+            notificacionService.crearNotificacionUsuario(
+                persistida.getComprador(),
+                "ENTREGA_MARCADA",
+                "El vendedor marcó tu compra #" + persistida.getId()
+                    + " como entregada; confirma la recepción dentro de las próximas 48 horas",
+                persistida,
+                ahora);
+            notificacionService.crearNotificacionUsuario(
+                vendedor,
+                "ENTREGA_MARCADA",
+                "Marcaste tu venta #" + persistida.getId() + " como entregada; espera la confirmación del comprador",
+                persistida,
+                ahora);
+        }
         return persistida;
     }
 }

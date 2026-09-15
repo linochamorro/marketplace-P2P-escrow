@@ -12,6 +12,7 @@ import com.easymarket.marketplace.service.LoginService;
 import com.easymarket.marketplace.service.RateLimitingService;
 import com.easymarket.marketplace.service.RegistroService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -25,7 +26,7 @@ import java.time.Duration;
 import java.util.Map;
 
 /**
- * Controller REST responsable de los endpoints de autenticación (login y registro) de EasyMarket.
+ * Controller REST responsable de los endpoints de autenticación (login, registro y logout) de EasyMarket.
  *
  * <p>Aplica las reglas de transporte de sesión y registro de {@code plan.md} y las Stories 0 y 0b de {@code spec.md}:
  * <ul>
@@ -34,6 +35,8 @@ import java.util.Map;
  *   <li>Resolución de IP resiliente priorizando {@code X-Real-IP} (sanitizado por proxies de borde
  *       como Railway/Cloudflare) y como alternativa el primer token de {@code X-Forwarded-For}.</li>
  *   <li>Respuesta con cookie HTTP {@code httpOnly; Secure; SameSite=None} para el token JWT en login.</li>
+ *   <li>Cierre de sesión devolviendo la cookie {@code jwt} expirada ({@code Max-Age=0}) sin
+ *       invalidación server-side del token (PHA07TSK02).</li>
  *   <li>Rechazo con código HTTP 401 y mensaje genérico en caso de credenciales erróneas.</li>
  *   <li>Rechazo con código HTTP 429 cuando la combinación email + IP supera el número de intentos.</li>
  * </ul>
@@ -72,6 +75,8 @@ public class AuthController {
      *   <li>Invoca {@link RegistroService#registrarUsuario(String, String)} para validar contraseña y unicidad de correo.</li>
      *   <li>Responde con código HTTP 201 Created y el DTO seguro {@link RegistroResponseDto} sin hash de contraseña.</li>
      *   <li>No aplica rate limiting ni genera cookie JWT (Story 0 no requiere login automático).</li>
+     *   <li>La anotación {@code @Valid} rechaza con HTTP 400 los cuerpos sin email o sin password
+     *       y el email con formato inválido (PHA16TSK06), antes de invocar al dominio.</li>
      * </ul>
      * </p>
      *
@@ -81,7 +86,7 @@ public class AuthController {
      * @throws PasswordInvalidaException si la contraseña no cumple la política (mapeado a HTTP 400 por {@link GlobalExceptionHandler})
      */
     @PostMapping("/registro")
-    public ResponseEntity<RegistroResponseDto> registrar(@RequestBody RegistroRequestDto registroRequest) {
+    public ResponseEntity<RegistroResponseDto> registrar(@Valid @RequestBody RegistroRequestDto registroRequest) {
         Usuario usuarioCreado = registroService.registrarUsuario(
                 registroRequest.getEmail(),
                 registroRequest.getPassword()
@@ -93,10 +98,12 @@ public class AuthController {
      * Endpoint REST {@code POST /auth/login} para el inicio de sesión de usuarios.
      *
      * <p>Sigue el contrato de orden de invocación de {@link RateLimitingService}:
-     * 1. {@code evaluarAcceso()} verifica si la clave email + IP está actualmente bloqueada (lanza 429 si lo está).
-     * 2. {@code loginService.login()} verifica credenciales y genera token JWT.
-     * 3. En caso de fallo de credenciales, {@code registrarFallo()} incrementa intentos en rate limiting y lanza 401.
-     * 4. En caso de éxito, {@code registrarExito()} reinicia intentos y setea la cookie {@code jwt} en la respuesta.
+     * 1. {@code @Valid} rechaza con HTTP 400 los cuerpos sin email o sin password (PHA16TSK06),
+     *    antes de evaluar el acceso y sin registrar intentos en rate limiting.
+     * 2. {@code evaluarAcceso()} verifica si la clave email + IP está actualmente bloqueada (lanza 429 si lo está).
+     * 3. {@code loginService.login()} verifica credenciales y genera token JWT.
+     * 4. En caso de fallo de credenciales, {@code registrarFallo()} incrementa intentos en rate limiting y lanza 401.
+     * 5. En caso de éxito, {@code registrarExito()} reinicia intentos y setea la cookie {@code jwt} en la respuesta.
      * </p>
      *
      * @param loginRequest DTO con credenciales (email y password)
@@ -107,7 +114,7 @@ public class AuthController {
      */
     @PostMapping("/login")
     public ResponseEntity<Map<String, String>> login(
-            @RequestBody LoginRequestDto loginRequest,
+            @Valid @RequestBody LoginRequestDto loginRequest,
             HttpServletRequest request
     ) {
         String ip = obtenerIpCliente(request);
@@ -140,6 +147,35 @@ public class AuthController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
                 .body(Map.of("mensaje", "Inicio de sesión exitoso"));
+    }
+
+    /**
+     * Endpoint REST {@code POST /auth/logout} para cerrar la sesión del usuario (PHA07TSK02;
+     * plan.md, sección Autenticación — fila Logout — y Fase 7 — fila Logout).
+     *
+     * <p>Devuelve una cookie {@code jwt} expirada ({@code Max-Age=0}, {@code Path=/},
+     * {@code HttpOnly}, {@code Secure}, {@code SameSite=None}) para que el navegador elimine
+     * la sesión. No existe invalidación server-side del JWT (exclusión explícita de spec.md,
+     * Story 0b, aceptada en plan.md), por lo que la operación es idempotente: funciona con o
+     * sin cookie previa y con token válido o inválido. La ruta permanece pública por el
+     * {@code permitAll} existente de {@code /auth/**}; no se modifica {@code SecurityConfig}.</p>
+     *
+     * @return {@link ResponseEntity} 200 OK con la cabecera {@code Set-Cookie} de expiración
+     *         y el cuerpo {@code {"mensaje": "Sesión cerrada"}}
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, String>> logout() {
+        ResponseCookie jwtCookieExpirada = ResponseCookie.from("jwt", "")
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .sameSite("None")
+                .maxAge(Duration.ZERO)
+                .build();
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, jwtCookieExpirada.toString())
+                .body(Map.of("mensaje", "Sesión cerrada"));
     }
 
     /**

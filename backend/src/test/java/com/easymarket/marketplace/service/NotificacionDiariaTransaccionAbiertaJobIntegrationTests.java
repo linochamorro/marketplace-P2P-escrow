@@ -75,6 +75,7 @@ class NotificacionDiariaTransaccionAbiertaJobIntegrationTests {
     @Autowired
     private NotificacionDiariaTransaccionAbiertaJob notificacionDiariaTransaccionAbiertaJob;
 
+
     /** Repository persisting buyer and seller fixtures. */
     @Autowired
     private UsuarioRepository usuarioRepository;
@@ -259,7 +260,7 @@ class NotificacionDiariaTransaccionAbiertaJobIntegrationTests {
         Usuario comprador = usuarioRepository.save(new Usuario("comprador-diario-" + sufijo + "@example.com", "hash", Rol.USUARIO, 0L, ahora));
         Categoria categoria = categoriaRepository.save(new Categoria("Categoría diario " + sufijo));
         Subcategoria subcategoria = subcategoriaRepository.save(new Subcategoria(categoria, "Subcategoría diario " + sufijo));
-        Publicacion publicacion = publicacionService.crearPublicacion(vendedor.getId(), categoria.getId(), subcategoria.getId(), 12_345L, 2, "Publicación para aviso diario");
+        Publicacion publicacion = publicacionService.crearPublicacion(vendedor.getId(), categoria.getId(), subcategoria.getId(), 12_345L, 2, "Publicación para aviso diario", null);
         publicacionService.cambiarEstado(publicacion.getId(), EstadoPublicacion.APROBADA, null);
         Transaccion transaccion = new Transaccion(comprador, publicacion, 12_345L, fechaReservada);
         transaccion.setEstado(estado);

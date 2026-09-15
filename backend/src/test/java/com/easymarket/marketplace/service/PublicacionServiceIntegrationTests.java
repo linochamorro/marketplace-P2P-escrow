@@ -76,7 +76,7 @@ class PublicacionServiceIntegrationTests {
         Subcategoria subcat = subcategoriaRepository.save(new Subcategoria(cat, "Smartphones"));
 
         Publicacion creada = publicacionService.crearPublicacion(
-            usuario.getId(), cat.getId(), subcat.getId(), 299900L, 10, "Smartphone 5G 128GB"
+            usuario.getId(), cat.getId(), subcat.getId(), 299900L, 10, "Smartphone 5G 128GB", null
         );
 
         assertThat(creada.getId()).isNotNull();
@@ -86,5 +86,29 @@ class PublicacionServiceIntegrationTests {
             "SELECT estado FROM publicaciones WHERE id = ?", String.class, creada.getId()
         );
         assertThat(estadoDB).isEqualTo("pendiente_revisión");
+    }
+
+    /**
+     * Verifica que la entidad {@link Publicacion} devuelta por {@link PublicacionService#crearPublicacion}
+     * trae el {@code codigoProducto} poblado por el trigger de la migración V22 (PHA15TSK13).
+     *
+     * <p>El trigger {@code tg_publicaciones_codigo_producto} asigna el código en la base de datos
+     * durante el {@code INSERT}; por lo tanto, si el servicio NO relee la entidad tras el guardado, la
+     * instancia que devuelve conserva {@code codigoProducto == null}. Este test verifica que la entidad
+     * retornada llega con el código y que respeta el formato {@code {YYYY}{PREF}{NNNNN}}.</p>
+     */
+    @Test
+    @DisplayName("Debe devolver la publicación creada con su codigoProducto poblado y con formato válido (trigger V22)")
+    void crearPublicacion_DevuelveEntidadConCodigoProductoValido() {
+        Usuario usuario = usuarioRepository.save(new Usuario("seller_codigo@example.com", "hash", Rol.USUARIO, 0L, ZonedDateTime.now()));
+        Categoria cat = categoriaRepository.save(new Categoria("Electrónica"));
+        Subcategoria subcat = subcategoriaRepository.save(new Subcategoria(cat, "Auriculares"));
+
+        Publicacion creada = publicacionService.crearPublicacion(
+            usuario.getId(), cat.getId(), subcat.getId(), 18900L, 5, "Auriculares Bluetooth", "auriculares.jpg"
+        );
+
+        assertThat(creada.getCodigoProducto()).isNotNull();
+        assertThat(creada.getCodigoProducto()).matches("\\d{4}[A-Z]{0,3}\\d{5}");
     }
 }

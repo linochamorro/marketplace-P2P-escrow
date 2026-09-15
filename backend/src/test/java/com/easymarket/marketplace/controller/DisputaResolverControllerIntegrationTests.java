@@ -24,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
@@ -59,6 +60,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * obligatorio en {@code ResolucionDisputaService} y traduce correctamente sus excepciones de
  * dominio. Cada caso verifica los efectos reales en base de datos (estado, saldo, movimiento,
  * stock, evento append-only y orden durable de reembolso), no solo el código HTTP.</p>
+ *
+ * <p><strong>Política única de fixtures ADMIN (PHA12TSK06).</strong> Esta clase NO crea ninguna
+ * fila ADMIN: el actor autorizado de los gates {@code hasRole("ADMIN")} es exclusivamente el
+ * administrador único provisionado por el contexto de test (seed V6 con
+ * {@code ADMIN_EMAIL}/{@code ADMIN_PASSWORD_HASH}, cuyo hash corresponde a la contraseña plana
+ * compartida {@code PASSWORD_RAW}), resuelto mediante {@link #obtenerAdminUnico()}. Los usuarios
+ * auxiliares (vendedor/comprador) nacen todos {@code Rol.USUARIO}. Motivo:
+ * {@code UsuarioRepository.findByRol(Rol.ADMIN)} es Optional por diseño (invariante de admin
+ * único, PHA06TSK02) y cualquier fixture con un ADMIN adicional rompe esa invariante.</p>
  */
 @SpringBootTest
 @Testcontainers
@@ -68,7 +78,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "spring.jpa.hibernate.ddl-auto=validate",
     "app.jwt.secret=clave-secreta-pruebas-resolver-disputas-minimo-32-caracteres",
     "ADMIN_EMAIL=admin.seed@easymarket.com",
-    "ADMIN_PASSWORD_HASH=$2a$10$R9h/cIPz0gi.URNNXRkh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW"
+    "ADMIN_PASSWORD_HASH=$2a$10$ezbtTwVogv0lR8nXJuHRk.RGzMVbhLBUjDAt4zzBdJhbqR.U53k6u"
 })
 class DisputaResolverControllerIntegrationTests {
 
@@ -91,24 +101,47 @@ class DisputaResolverControllerIntegrationTests {
     @Autowired private StripeRefundOutboxRepository stripeRefundOutboxRepository;
     @Autowired private PasswordEncoder passwordEncoder;
 
+    /** Email del ADMIN único provisionado por el contexto de test (propiedad {@code ADMIN_EMAIL}, seed V6). */
+    @Value("${ADMIN_EMAIL}")
+    private String adminEmail;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private MockMvc mockMvc;
     private Usuario vendedor;
     private Usuario comprador;
+
+    /** ADMIN único provisionado por el seed V6; se resuelve en cada escenario (política PHA12TSK06). */
     private Usuario admin;
     private Categoria categoria;
     private Subcategoria subcategoria;
 
-    /** Configura identidades y catálogo aislados para cada escenario HTTP. */
+    /**
+     * Configura identidades y catálogo aislados para cada escenario HTTP. Ningún fixture crea
+     * filas ADMIN (política PHA12TSK06): el actor administrador es el único provisionado por el
+     * contexto de test, resuelto del seed V6.
+     */
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).apply(springSecurity()).build();
         String sufijo = Long.toUnsignedString(System.nanoTime());
         vendedor = guardarUsuario("vendedor.disputa." + sufijo + "@easymarket.com", Rol.USUARIO);
         comprador = guardarUsuario("comprador.disputa." + sufijo + "@easymarket.com", Rol.USUARIO);
-        admin = guardarUsuario("admin.disputa." + sufijo + "@easymarket.com", Rol.ADMIN);
+        admin = obtenerAdminUnico();
         categoria = categoriaRepository.save(new Categoria("Categoría " + sufijo));
         subcategoria = subcategoriaRepository.save(new Subcategoria(categoria, "Subcategoría " + sufijo));
+    }
+
+    /**
+     * Resuelve la identidad persistida del ADMIN único provisionado por el contexto de test
+     * (seed V6, email leído de la propiedad {@code ADMIN_EMAIL}).
+     *
+     * @return la entidad persistida del único administrador
+     * @throws IllegalStateException si el admin sembrado no está presente (provisión de datos inconsistente)
+     */
+    private Usuario obtenerAdminUnico() {
+        return usuarioRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new IllegalStateException(
+                        "El ADMIN único provisionado por el contexto (" + adminEmail + ") no está presente"));
     }
 
     /**
@@ -363,7 +396,8 @@ class DisputaResolverControllerIntegrationTests {
     }
 
     /**
-     * Persiste un usuario de prueba con el rol solicitado.
+     * Persiste un usuario auxiliar de prueba con el rol solicitado (política PHA12TSK06: en esta
+     * clase solo se invoca con {@link Rol#USUARIO}; el ADMIN único nunca nace aquí).
      *
      * @param email correo único del usuario
      * @param rol rol persistido para la identidad

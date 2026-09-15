@@ -7,6 +7,7 @@ import com.easymarket.marketplace.exception.TransicionEstadoTransaccionInvalidaE
 import com.easymarket.marketplace.model.EstadoTransaccion;
 import com.easymarket.marketplace.model.IdempotencyKey;
 import com.easymarket.marketplace.model.MovimientoSaldo;
+import com.easymarket.marketplace.model.Notificacion;
 import com.easymarket.marketplace.model.Publicacion;
 import com.easymarket.marketplace.model.ResolucionDisputa;
 import com.easymarket.marketplace.model.StripeRefundOutbox;
@@ -20,6 +21,7 @@ import com.easymarket.marketplace.repository.StripeRefundOutboxRepository;
 import com.easymarket.marketplace.repository.TransaccionEventoRepository;
 import com.easymarket.marketplace.repository.TransaccionRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +37,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,12 +51,16 @@ import static org.mockito.Mockito.when;
  * <p>Las pruebas distinguen el crédito interno al vendedor de la reversión al comprador: la
  * primera rama inserta un movimiento positivo y la segunda restaura stock y crea una orden
  * durable de Stripe. Ambas persisten un evento append-only con la identidad real del admin,
- * decisión y motivo obligatorio.</p>
+ * decisión y motivo obligatorio. Desde PHA12TSK03 (recuperación de PHA09TSK05) verifican además
+ * que ambas ramas emiten, dentro de la misma transacción, la notificación accionable
+ * DISPUTA_RESUELTA al comprador y al vendedor con los mensajes dirigidos ("tu compra"/"tu venta")
+ * que la UI enruta, y que ningún rechazo temprano emite notificaciones.</p>
  */
 @ExtendWith(MockitoExtension.class)
 class ResolucionDisputaServiceTests {
 
     private static final Long TRANSACCION_ID = 100L;
+    private static final Long COMPRADOR_ID = 20L;
     private static final Long VENDEDOR_ID = 10L;
     private static final Long ADMIN_ID = 30L;
     private static final long PRECIO_SNAPSHOT = 12_345L;
@@ -62,6 +72,34 @@ class ResolucionDisputaServiceTests {
     @Mock private IdempotencyKeyRepository idempotencyKeyRepository;
     @Mock private TransaccionEventoRepository transaccionEventoRepository;
     @Mock private StripeRefundOutboxRepository stripeRefundOutboxRepository;
+    @Mock private NotificacionService notificacionService;
+
+    /**
+     * Configura el mock de {@link NotificacionService} en modo leniente para que responda a cada
+     * emisión accionable construyendo la instancia real de {@link Notificacion} con los argumentos
+     * recibidos (patrón de PHA09TSK05-L02). Es leniente porque los tests de rechazo temprano nunca
+     * llegan a emitir notificaciones y, sin {@code lenient()}, Mockito reportaría stubbings
+     * innecesarios para esas pruebas. El stub de {@code crearNotificacionAdmin} usa un usuario
+     * admin simulado porque la resolución del destinatario real ocurre dentro del servicio
+     * notificado, no en el servicio bajo prueba.
+     */
+    @BeforeEach
+    void setUp() {
+        lenient().when(notificacionService.crearNotificacionUsuario(any(), any(), any(), any(), any()))
+            .thenAnswer(invocation -> new Notificacion(
+                invocation.getArgument(0),
+                invocation.getArgument(3),
+                invocation.getArgument(2),
+                invocation.getArgument(1),
+                invocation.getArgument(4)));
+        lenient().when(notificacionService.crearNotificacionAdmin(any(), any(), any(), any()))
+            .thenAnswer(invocation -> new Notificacion(
+                usuario(ADMIN_ID),
+                invocation.getArgument(2),
+                invocation.getArgument(1),
+                invocation.getArgument(0),
+                invocation.getArgument(3)));
+    }
 
     /** Verifica que cualquier estado distinto de disputa no produce efectos persistentes. */
     @Test
@@ -127,6 +165,10 @@ class ResolucionDisputaServiceTests {
         assertThat(evento.getEstadoOrigen()).isEqualTo(EstadoTransaccion.DISPUTA);
         assertThat(evento.getEstadoDestino()).isEqualTo(EstadoTransaccion.COMPLETADA);
         assertThat(evento.getMotivo()).isEqualTo("A_FAVOR_VENDEDOR: La entrega quedó acreditada");
+        verify(notificacionService).crearNotificacionUsuario(same(resultado.getComprador()),
+            eq("DISPUTA_RESUELTA"), contains("tu compra"), same(resultado), any());
+        verify(notificacionService).crearNotificacionUsuario(same(resultado.getPublicacion().getUsuario()),
+            eq("DISPUTA_RESUELTA"), contains("tu venta"), same(resultado), any());
         verify(publicacionRepository, never()).incrementarStock(any());
         verify(idempotencyKeyRepository, never()).findByTransaccionId(any());
         verify(stripeRefundOutboxRepository, never()).save(any());
@@ -159,6 +201,10 @@ class ResolucionDisputaServiceTests {
         assertThat(evento.getEstadoOrigen()).isEqualTo(EstadoTransaccion.DISPUTA);
         assertThat(evento.getEstadoDestino()).isEqualTo(EstadoTransaccion.CANCELADA);
         assertThat(evento.getMotivo()).isEqualTo("A_FAVOR_COMPRADOR: El producto no coincide con la publicación");
+        verify(notificacionService).crearNotificacionUsuario(same(resultado.getComprador()),
+            eq("DISPUTA_RESUELTA"), contains("tu compra"), same(resultado), any());
+        verify(notificacionService).crearNotificacionUsuario(same(resultado.getPublicacion().getUsuario()),
+            eq("DISPUTA_RESUELTA"), contains("tu venta"), same(resultado), any());
         verify(usuarioRepository, never()).incrementarSaldoDisponible(any(), anyLong());
         verify(movimientoSaldoRepository, never()).save(any());
     }
@@ -193,7 +239,8 @@ class ResolucionDisputaServiceTests {
     /** @return servicio configurado con los mocks de esta prueba. */
     private ResolucionDisputaService service() {
         return new ResolucionDisputaService(transaccionRepository, usuarioRepository, movimientoSaldoRepository,
-            publicacionRepository, idempotencyKeyRepository, transaccionEventoRepository, stripeRefundOutboxRepository);
+            publicacionRepository, idempotencyKeyRepository, transaccionEventoRepository,
+            stripeRefundOutboxRepository, notificacionService);
     }
 
     /** @return movimiento de saldo persistido por la rama vendedora. */
@@ -221,7 +268,7 @@ class ResolucionDisputaServiceTests {
      * Crea una transacción asociada a una publicación y vendedor para el escenario indicado.
      *
      * @param estado estado inicial de la transacción
-     * @return transacción con precio snapshot entero y relaciones persistidas simuladamente
+     * @return transacción con precio snapshot entero, comprador y relaciones persistidas simuladamente
      */
     private Transaccion transaccion(EstadoTransaccion estado) {
         Publicacion publicacion = new Publicacion();
@@ -229,6 +276,7 @@ class ResolucionDisputaServiceTests {
         publicacion.setUsuario(usuario(VENDEDOR_ID));
         Transaccion transaccion = new Transaccion();
         transaccion.setId(TRANSACCION_ID);
+        transaccion.setComprador(usuario(COMPRADOR_ID));
         transaccion.setPublicacion(publicacion);
         transaccion.setEstado(estado);
         transaccion.setPrecioSnapshot(PRECIO_SNAPSHOT);
@@ -247,7 +295,7 @@ class ResolucionDisputaServiceTests {
         return usuario;
     }
 
-    /** Verifica que un rechazo no persiste ningún efecto local de resolución. */
+    /** Verifica que un rechazo no persiste ningún efecto local ni emite notificaciones. */
     private void verificarSinEscrituras() {
         verify(usuarioRepository, never()).incrementarSaldoDisponible(any(), anyLong());
         verify(movimientoSaldoRepository, never()).save(any());
@@ -255,5 +303,7 @@ class ResolucionDisputaServiceTests {
         verify(transaccionRepository, never()).save(any());
         verify(transaccionEventoRepository, never()).save(any());
         verify(stripeRefundOutboxRepository, never()).save(any());
+        verify(notificacionService, never()).crearNotificacionUsuario(any(), any(), any(), any(), any());
+        verify(notificacionService, never()).crearNotificacionAdmin(any(), any(), any(), any());
     }
 }

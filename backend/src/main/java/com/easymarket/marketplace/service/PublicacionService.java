@@ -7,8 +7,8 @@ import com.easymarket.marketplace.exception.EstadoPublicacionNoEditableException
 import com.easymarket.marketplace.exception.MotivoRequeridoException;
 import com.easymarket.marketplace.exception.NoEsElPropietarioException;
 import com.easymarket.marketplace.exception.PrecioInvalidoException;
+import com.easymarket.marketplace.exception.PublicacionConTransaccionesException;
 import com.easymarket.marketplace.exception.PublicacionNoEncontradaException;
-import com.easymarket.marketplace.exception.PublicacionNoEliminableException;
 import com.easymarket.marketplace.exception.StockInvalidoException;
 import com.easymarket.marketplace.exception.SubcategoriaNoPerteneceACategoriaException;
 import com.easymarket.marketplace.exception.TransicionEstadoInvalidaException;
@@ -17,15 +17,20 @@ import com.easymarket.marketplace.model.Categoria;
 import com.easymarket.marketplace.model.EstadoPublicacion;
 import com.easymarket.marketplace.model.Publicacion;
 import com.easymarket.marketplace.model.PublicacionEvento;
+import com.easymarket.marketplace.model.PublicacionMotivoHistorico;
 import com.easymarket.marketplace.model.Rol;
 import com.easymarket.marketplace.model.Subcategoria;
 import com.easymarket.marketplace.model.Usuario;
 import com.easymarket.marketplace.repository.CategoriaRepository;
+import com.easymarket.marketplace.repository.NotificacionRepository;
 import com.easymarket.marketplace.repository.PublicacionRepository;
 import com.easymarket.marketplace.repository.PublicacionEventoRepository;
-import com.easymarket.marketplace.repository.NotificacionRepository;
+import com.easymarket.marketplace.repository.PublicacionMotivoHistoricoRepository;
 import com.easymarket.marketplace.repository.SubcategoriaRepository;
+import com.easymarket.marketplace.repository.TransaccionRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
+import com.easymarket.marketplace.service.NotificacionService;
+import jakarta.persistence.EntityManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -44,7 +49,7 @@ import java.time.ZonedDateTime;
  *   <li>Validación de jerarquía padre-hijo (garantiza que la subcategoría pertenezca a la categoría indicada).</li>
  *   <li>Asignación por defecto del estado {@link EstadoPublicacion#PENDIENTE_REVISION}.</li>
  *   <li>Transiciones controladas conforme a la máquina de estados oficial.</li>
- *   <li>Edición de publicaciones aprobadas (modifica precio, stock &ge; 0 y descripción; bloquea categoría/subcategoría).</li>
+     *   <li>Edición de publicaciones aprobadas o pendientes de revisión (modifica precio, stock &ge; 0, descripción e imagen; bloquea categoría/subcategoría).</li>
  * </ul>
  * </p>
  */
@@ -58,30 +63,49 @@ public class PublicacionService {
     private final CategoriaRepository categoriaRepository;
     private final SubcategoriaRepository subcategoriaRepository;
     private final PublicacionEventoRepository publicacionEventoRepository;
+    private final PublicacionMotivoHistoricoRepository publicacionMotivoHistoricoRepository;
     private final NotificacionRepository notificacionRepository;
+    private final NotificacionService notificacionService;
+    private final TransaccionRepository transaccionRepository;
+    private final EntityManager entityManager;
 
     /**
-     * Construye el servicio inyectando los repositorios necesarios.
+     * Construye el servicio inyectando los repositorios necesarios y el {@link EntityManager}.
      *
      * @param publicacionRepository repositorio JPA de publicaciones
      * @param usuarioRepository repositorio JPA de usuarios
      * @param categoriaRepository repositorio JPA de categorías
      * @param subcategoriaRepository repositorio JPA de subcategorías
      * @param publicacionEventoRepository repositorio JPA del log append-only de creación
+     * @param publicacionMotivoHistoricoRepository repositorio JPA del histórico append-only de motivos de moderación
      * @param notificacionRepository repositorio JPA de avisos in-app
+     * @param notificacionService servicio de dominio para notificaciones accionables (PHA09TSK05)
+     * @param transaccionRepository repositorio JPA de transacciones, usado para rechazar la eliminación
+     *        de publicaciones con transacciones asociadas (PHA12TSK01)
+     * @param entityManager gestor de entidades JPA, usado para releer la entidad recién guardada y
+     *        obtener el {@code codigoProducto} que el trigger de la migración V22 asigna en base de datos
+     *        (PHA15TSK13)
      */
     public PublicacionService(PublicacionRepository publicacionRepository,
                                UsuarioRepository usuarioRepository,
                                CategoriaRepository categoriaRepository,
                                SubcategoriaRepository subcategoriaRepository,
                                PublicacionEventoRepository publicacionEventoRepository,
-                               NotificacionRepository notificacionRepository) {
+                               PublicacionMotivoHistoricoRepository publicacionMotivoHistoricoRepository,
+                               NotificacionRepository notificacionRepository,
+                               NotificacionService notificacionService,
+                               TransaccionRepository transaccionRepository,
+                               EntityManager entityManager) {
         this.publicacionRepository = publicacionRepository;
         this.usuarioRepository = usuarioRepository;
         this.categoriaRepository = categoriaRepository;
         this.subcategoriaRepository = subcategoriaRepository;
         this.publicacionEventoRepository = publicacionEventoRepository;
+        this.publicacionMotivoHistoricoRepository = publicacionMotivoHistoricoRepository;
         this.notificacionRepository = notificacionRepository;
+        this.notificacionService = notificacionService;
+        this.transaccionRepository = transaccionRepository;
+        this.entityManager = entityManager;
     }
 
     /**
@@ -93,7 +117,10 @@ public class PublicacionService {
      * @param precio precio en centavos (entero > 0)
      * @param stock cantidad inicial disponible (entero >= 1)
      * @param descripcion descripción del producto
-     * @return la entidad {@link Publicacion} creada y persistida con estado 'pendiente_revisión'
+     * @param imagenFilename nombre de archivo de imagen opcional (sin prefijo de URL)
+     * @return la entidad {@link Publicacion} creada y persistida con estado 'pendiente_revisión' y
+     *         con su {@code codigoProducto} poblado (PHA15TSK13: el trigger de V22 lo asigna en la
+     *         base de datos y el servicio relee la instancia para que la devuelta lo traiga)
      * @throws PrecioInvalidoException si precio <= 0
      * @throws StockInvalidoException si stock < 1
      * @throws UsuarioNoEncontradoException si el usuario no existe
@@ -102,7 +129,7 @@ public class PublicacionService {
      * @throws AdministradorNoEncontradoException si falta la única cuenta ADMIN requerida para el aviso
      */
     @Transactional
-    public Publicacion crearPublicacion(Long usuarioId, Long categoriaId, Long subcategoriaId, long precio, int stock, String descripcion) {
+    public Publicacion crearPublicacion(Long usuarioId, Long categoriaId, Long subcategoriaId, long precio, int stock, String descripcion, String imagenFilename) {
         if (precio <= 0) {
             throw new PrecioInvalidoException("El precio debe ser un monto entero positivo mayor a cero");
         }
@@ -125,22 +152,26 @@ public class PublicacionService {
             );
         }
 
-        Publicacion publicacion = publicacionRepository.save(
-            new Publicacion(usuario, categoria, subcategoria, precio, stock, descripcion)
-        );
-        Usuario administrador = usuarioRepository.findByRol(Rol.ADMIN)
-            .orElseThrow(() -> new AdministradorNoEncontradoException(
-                "No existe la cuenta ADMIN única requerida para notificar la publicación pendiente"
-            ));
+        Publicacion publicacion = new Publicacion(usuario, categoria, subcategoria, precio, stock, descripcion);
+        if (imagenFilename != null && !imagenFilename.isBlank()) {
+            publicacion.setImagenFilename(imagenFilename);
+        }
+        Publicacion guardada = publicacionRepository.save(publicacion);
+        // El trigger de la migración V22 asigna codigo_producto en DB durante el INSERT; la instancia
+        // gestionada queda con el campo en null (primera caché). Se relee para que la entidad devuelta
+        // traiga el código poblado (PHA15TSK13) — saveAndFlush + findById NO basta porque findById
+        // devuelve la MISMA instancia gestionada en caché (ver Artifact, decisiones no triviales).
+        entityManager.refresh(guardada);
         ZonedDateTime ahora = ZonedDateTime.now();
-        publicacionEventoRepository.save(new PublicacionEvento(publicacion, usuario, ahora));
-        notificacionRepository.save(new com.easymarket.marketplace.model.Notificacion(
-            administrador,
-            "Nueva publicación pendiente de revisión: #" + publicacion.getId(),
-            "NUEVA_PUBLICACION_PENDIENTE",
-            ahora
-        ));
-        return publicacion;
+        publicacionEventoRepository.save(new PublicacionEvento(guardada, usuario, ahora));
+        notificacionService.crearNotificacionAdmin(
+                "PUBLICACION_PENDIENTE_APROBAR",
+                "Nueva publicación pendiente de aprobación: #" + guardada.getId(),
+                guardada,
+                null,
+                ahora
+        );
+        return guardada;
     }
 
     /**
@@ -154,6 +185,32 @@ public class PublicacionService {
     public Publicacion obtenerPublicacionPorId(Long id) {
         return publicacionRepository.findById(id)
             .orElseThrow(() -> new PublicacionNoEncontradaException("Publicación con ID " + id + " no encontrada"));
+    }
+
+    /**
+     * Obtiene una publicación por su ID únicamente si está aprobada y visible para el marketplace
+     * (PHA06TSK04; Story 11, spec.md).
+     *
+     * <p>Regla de dominio del detalle público {@code GET /publicaciones/{id}}: la publicación debe
+     * existir y estar en estado {@link EstadoPublicacion#APROBADA}. Tanto un {@code id} inexistente
+     * como una publicación existente en cualquier otro estado
+     * ({@code PENDIENTE_REVISION}, {@code CAMBIOS_SOLICITADOS}, {@code RECHAZADA}, {@code OCULTA})
+     * lanzan {@link PublicacionNoEncontradaException}: la semántica es ocultar la existencia — "no
+     * aprobado no queda expuesto al marketplace" (criterio de la fila de tarea). El controlador no
+     * decide el estado; esta regla vive en la capa de dominio.</p>
+     *
+     * @param id ID de la publicación
+     * @return la entidad {@link Publicacion} encontrada y aprobada
+     * @throws PublicacionNoEncontradaException si la publicación no existe o su estado no es
+     *                                          {@link EstadoPublicacion#APROBADA}
+     */
+    @Transactional(readOnly = true)
+    public Publicacion obtenerPublicacionAprobadaPorId(Long id) {
+        Publicacion publicacion = obtenerPublicacionPorId(id);
+        if (publicacion.getEstado() != EstadoPublicacion.APROBADA) {
+            throw new PublicacionNoEncontradaException("Publicación con ID " + id + " no encontrada");
+        }
+        return publicacion;
     }
 
     /**
@@ -206,6 +263,76 @@ public class PublicacionService {
     }
 
     /**
+     * Cambia el estado de una publicación y, cuando la moderación lo exige, inserta el motivo en el
+     * histórico append-only en la misma transacción atómica (PHA06TSK05; Story 3, spec.md; plan.md,
+     * "Histórico de motivos de moderación").
+     *
+     * <p>Es la puerta de entrada transaccional de {@code PATCH /publicaciones/{id}/moderar} para
+     * garantizar que el cambio de estado y el registro del motivo histórico no puedan quedar
+     * inconsistentes (constitución, principio 1): delega en {@link #cambiarEstado}, que se ejecuta
+     * dentro de la misma transacción (propagación REQUIRED), y solo si la transición es a
+     * {@link EstadoPublicacion#CAMBIOS_SOLICITADOS} o {@link EstadoPublicacion#RECHAZADA} persiste
+     * el motivo literal con el admin moderador como actor. La moderación a {@code APROBADA} no
+     * inserta ningún registro. El histórico nunca se modifica ni se elimina (constitución, principio
+     * 2; trigger de V17) y la corrección de Story 3 no lo toca.</p>
+     *
+     * @param publicacionId ID de la publicación a moderar
+     * @param nuevoEstado estado al que la moderación transiciona la publicación
+     * @param motivo motivo literal de la moderación (obligatorio para CAMBIOS_SOLICITADOS y RECHAZADA)
+     * @param actorId ID del admin moderador autenticado
+     * @return la entidad {@link Publicacion} actualizada y persistida
+     * @throws PublicacionNoEncontradaException si la publicación no existe
+     * @throws TransicionEstadoInvalidaException si la transición desde el estado actual no está permitida
+     * @throws MotivoRequeridoException si el nuevo estado es RECHAZADA o CAMBIOS_SOLICITADOS y el motivo es nulo o en blanco
+     * @throws UsuarioNoEncontradoException si el admin moderador indicado no existe
+     */
+@Transactional
+    public Publicacion cambiarEstadoRegistrandoMotivoHistorico(Long publicacionId, EstadoPublicacion nuevoEstado, String motivo, Long actorId) {
+        Publicacion actualizada = cambiarEstado(publicacionId, nuevoEstado, motivo);
+
+        ZonedDateTime ahora = ZonedDateTime.now();
+
+        if (nuevoEstado == EstadoPublicacion.CAMBIOS_SOLICITADOS || nuevoEstado == EstadoPublicacion.RECHAZADA) {
+            Usuario actor = usuarioRepository.findById(actorId)
+                    .orElseThrow(() -> new UsuarioNoEncontradoException(
+                            "Usuario moderador con ID " + actorId + " no encontrado"));
+            publicacionMotivoHistoricoRepository.save(new PublicacionMotivoHistorico(
+                    actualizada, actor, nuevoEstado.name(), motivo, ahora));
+            logger.info("Registrado motivo histórico de moderación para publicación ID {}: accion={}, actorId={}",
+                    publicacionId, nuevoEstado.name(), actorId);
+        }
+
+        // Notificar al vendedor sobre el resultado de la moderación (PHA09TSK05)
+        if (nuevoEstado == EstadoPublicacion.APROBADA) {
+            notificacionService.crearNotificacionUsuario(
+                    actualizada.getUsuario(),
+                    "PUBLICACION_APROBADA_RECHAZADA",
+                    "Tu publicación #" + actualizada.getId() + " ha sido aprobada",
+                    null,
+                    ahora
+            );
+        } else if (nuevoEstado == EstadoPublicacion.RECHAZADA) {
+            notificacionService.crearNotificacionUsuario(
+                    actualizada.getUsuario(),
+                    "PUBLICACION_APROBADA_RECHAZADA",
+                    "Tu publicación #" + actualizada.getId() + " ha sido rechazada: " + motivo,
+                    null,
+                    ahora
+            );
+        } else if (nuevoEstado == EstadoPublicacion.CAMBIOS_SOLICITADOS) {
+            notificacionService.crearNotificacionUsuario(
+                    actualizada.getUsuario(),
+                    "PUBLICACION_APROBADA_RECHAZADA",
+                    "Tu publicación #" + actualizada.getId() + " requiere cambios: " + motivo,
+                    null,
+                    ahora
+            );
+        }
+
+        return actualizada;
+    }
+
+    /**
      * Determina si una transición pertenece a la máquina de estados habilitada por Stories 2 y 3.
      *
      * @param actual estado actualmente persistido
@@ -225,34 +352,48 @@ public class PublicacionService {
     }
 
     /**
-     * Edita los campos de una publicación por su vendedor propietario y gestiona la visibilidad por stock (Stories 3 y 10, spec.md).
+     * Edita los campos de una publicación por su vendedor propietario en estado
+     * {@link EstadoPublicacion#PENDIENTE_REVISION}, {@link EstadoPublicacion#APROBADA} u
+     * {@link EstadoPublicacion#OCULTA}, y gestiona la visibilidad por stock (Stories 3 y 10, spec.md).
      *
      * <p>Orquesta la edición de campos permitidos y la actualización atómica de visibilidad:
      * <ul>
      *   <li>Si el DTO contiene actualización de stock, invoca primero {@link #actualizarStock(Long, int)} para aplicar la regla de Story 10 (stock 0 transiciona a {@link EstadoPublicacion#OCULTA}).</li>
-     *   <li>Posteriormente invoca {@link #editarPublicacion(Long, Long, Integer, String, Long, Long)} para actualizar precio y descripción en estado APROBADA (o conservando OCULTA si el stock pasó a 0).</li>
+     *   <li>Posteriormente invoca {@link #editarPublicacion(Long, Long, Integer, String, Long, Long, String)} para actualizar precio, descripción e imagen en estado APROBADA o PENDIENTE_REVISION (o conserva OCULTA cuando corresponde).</li>
      * </ul>
-     * </p>
+     * Acepta opcionalmente {@code nuevoImagenFilename} para actualizar la imagen del producto (PHA09TSK04).</p>
      *
      * @param publicacionId ID de la publicación
      * @param usuarioId ID del usuario solicitante
      * @param nuevoPrecio nuevo precio opcional (> 0)
      * @param nuevoStock nuevo stock opcional (>= 0)
      * @param nuevaDescripcion nueva descripción opcional
+     * @param nuevoImagenFilename nuevo nombre de archivo de imagen opcional (sin prefijo de URL)
      * @return la entidad {@link Publicacion} actualizada
      * @throws com.easymarket.marketplace.exception.NoEsElPropietarioException si el usuarioId no coincide con el dueño
+     * @throws EstadoPublicacionNoEditableException si la publicación no está en estado PENDIENTE_REVISION, APROBADA u OCULTA
      */
     @Transactional
     public Publicacion editarPublicacionDuenio(Long publicacionId,
                                                Long usuarioId,
                                                Long nuevoPrecio,
                                                Integer nuevoStock,
-                                               String nuevaDescripcion) {
+                                               String nuevaDescripcion,
+                                               String nuevoImagenFilename) {
         Publicacion publicacion = obtenerPublicacionPorId(publicacionId);
 
         if (!publicacion.getUsuario().getId().equals(usuarioId)) {
             throw new com.easymarket.marketplace.exception.NoEsElPropietarioException(
                 "El usuario con ID " + usuarioId + " no es el propietario de la publicación " + publicacionId
+            );
+        }
+
+        if (publicacion.getEstado() != EstadoPublicacion.PENDIENTE_REVISION
+                && publicacion.getEstado() != EstadoPublicacion.APROBADA
+                && publicacion.getEstado() != EstadoPublicacion.OCULTA) {
+            throw new EstadoPublicacionNoEditableException(
+                 "Solo se pueden editar publicaciones en estado 'PENDIENTE_REVISION', 'APROBADA' u 'OCULTA'. Estado actual: "
+                    + publicacion.getEstado()
             );
         }
 
@@ -271,18 +412,22 @@ public class PublicacionService {
             if (nuevaDescripcion != null) {
                 aEditar.setDescripcion(nuevaDescripcion);
             }
-            logger.info("Edición de publicación oculta ID {}: precio={}, stock={}, descripción editada", publicacionId, aEditar.getPrecio(), aEditar.getStock());
+            if (nuevoImagenFilename != null) {
+                aEditar.setImagenFilename(nuevoImagenFilename);
+            }
+            logger.info("Edición de publicación oculta ID {}: precio={}, stock={}, descripción editada, imagen={}", publicacionId, aEditar.getPrecio(), aEditar.getStock(), aEditar.getImagenFilename());
             return publicacionRepository.save(aEditar);
         }
 
-        return editarPublicacion(publicacionId, nuevoPrecio, nuevoStock, nuevaDescripcion, null, null);
+        return editarPublicacion(publicacionId, nuevoPrecio, nuevoStock, nuevaDescripcion, null, null, nuevoImagenFilename);
     }
 
     /**
-     * Edita los campos permitidos (precio, stock y descripción) de una publicación aprobada.
+     * Edita los campos permitidos (precio, stock, descripción e imagen) de una publicación aprobada o pendiente de revisión.
      *
      * <p>Conserva sin cambios los campos recibidos como {@code null}, rechaza modificaciones de
-     * categoría o subcategoría y no modifica el estado de la publicación.</p>
+     * categoría o subcategoría y no modifica el estado de la publicación.
+     * Acepta opcionalmente {@code nuevoImagenFilename} para actualizar la imagen del producto (PHA09TSK04).</p>
      *
      * @param publicacionId ID de la publicación a editar
      * @param nuevoPrecio nuevo precio entero en centavos, mayor que cero, o {@code null} para conservarlo
@@ -290,9 +435,10 @@ public class PublicacionService {
      * @param nuevaDescripcion nueva descripción o {@code null} para conservarla
      * @param categoriaIdEnviada ID de categoría recibido o {@code null} cuando no se solicita cambiarla
      * @param subcategoriaIdEnviada ID de subcategoría recibido o {@code null} cuando no se solicita cambiarla
+     * @param nuevoImagenFilename nuevo nombre de archivo de imagen opcional (sin prefijo de URL)
      * @return la publicación actualizada y persistida
      * @throws PublicacionNoEncontradaException si no existe la publicación indicada
-     * @throws EstadoPublicacionNoEditableException si la publicación no está en estado {@link EstadoPublicacion#APROBADA}
+      * @throws EstadoPublicacionNoEditableException si la publicación no está en estado {@link EstadoPublicacion#APROBADA} ni {@link EstadoPublicacion#PENDIENTE_REVISION}
      * @throws CategoriaPublicacionInmutableException si la categoría o subcategoría recibida difiere de la actual
      * @throws PrecioInvalidoException si {@code nuevoPrecio} es cero o negativo
      * @throws StockInvalidoException si {@code nuevoStock} es negativo
@@ -303,12 +449,14 @@ public class PublicacionService {
                                          Integer nuevoStock,
                                          String nuevaDescripcion,
                                          Long categoriaIdEnviada,
-                                         Long subcategoriaIdEnviada) {
+                                         Long subcategoriaIdEnviada,
+                                         String nuevoImagenFilename) {
         Publicacion publicacion = obtenerPublicacionPorId(publicacionId);
 
-        if (publicacion.getEstado() != EstadoPublicacion.APROBADA) {
+        if (publicacion.getEstado() != EstadoPublicacion.APROBADA
+                && publicacion.getEstado() != EstadoPublicacion.PENDIENTE_REVISION) {
             throw new EstadoPublicacionNoEditableException(
-                "Solo se pueden editar publicaciones en estado 'APROBADA'. Estado actual: " + publicacion.getEstado()
+                "Solo se pueden editar publicaciones en estado 'APROBADA' o 'PENDIENTE_REVISION'. Estado actual: " + publicacion.getEstado()
             );
         }
 
@@ -342,7 +490,11 @@ public class PublicacionService {
             publicacion.setDescripcion(nuevaDescripcion);
         }
 
-        logger.info("Edición de publicación ID {}: precio={}, stock={}, descripción editada", publicacionId, publicacion.getPrecio(), publicacion.getStock());
+        if (nuevoImagenFilename != null) {
+            publicacion.setImagenFilename(nuevoImagenFilename);
+        }
+
+        logger.info("Edición de publicación ID {}: precio={}, stock={}, descripción editada, imagen={}", publicacionId, publicacion.getPrecio(), publicacion.getStock(), publicacion.getImagenFilename());
 
         return publicacionRepository.save(publicacion);
     }
@@ -409,30 +561,64 @@ public class PublicacionService {
         publicacion.setSubcategoria(subcategoria);
         publicacion.setEstado(EstadoPublicacion.PENDIENTE_REVISION);
 
+        ZonedDateTime ahora = ZonedDateTime.now();
+        Publicacion guardada = publicacionRepository.save(publicacion);
+
+        // Notificar al admin que la publicación fue corregida y reenviada (PHA09TSK05)
+        notificacionService.crearNotificacionAdmin(
+                "PUBLICACION_PENDIENTE_APROBAR",
+                "Publicación #" + guardada.getId() + " corregida y reenviada a revisión",
+                guardada,
+                null,
+                ahora
+        );
+
         logger.info("Corrección de publicación ID {}: nueva categoría/subcategoría ({}/{}), reenviada a revisión",
             publicacionId, categoriaId, subcategoriaId);
 
-        return publicacionRepository.save(publicacion);
+        return guardada;
     }
 
     /**
-     * Elimina definitivamente una publicación propia en estado {@link EstadoPublicacion#RECHAZADA} (Story 3, spec.md).
+     * Elimina definitivamente una publicación propia en CUALQUIER estado
+     * (APROBADA, PENDIENTE_REVISION, OCULTA, CAMBIOS_SOLICITADOS, RECHAZADA),
+     * siempre que no tenga transacciones asociadas.
      *
-     * <p>La eliminación es la alternativa del vendedor a la corrección cuando su publicación fue
-     * rechazada por producto prohibido. Solo el propietario puede eliminar y solo una publicación
-     * {@code RECHAZADA} es eliminable: cualquier otro estado conserva la fila. El evento append-only
-     * {@code CREADA} queda conservado con {@code publicacion_id = NULL} gracias a la acción
-     * referencial {@code ON DELETE SET NULL} de la migración V16 (constitution, principio 2).</p>
+     * <p>La eliminación está disponible para el propietario en todos los estados de la publicación
+     * (decisión de Lino 2026-08-20 extendiendo Story 3, spec.md). Solo el propietario puede eliminar.
+     * Desde PHA12 (decisión de Lino 2026-08-23, plan.md "PHA12 — Eliminación de publicaciones con
+     * transacciones asociadas") una publicación referenciada por al menos una fila de
+     * {@code transacciones} NO es eliminable: se lanza {@link PublicacionConTransaccionesException}
+     * antes del {@code delete}, evitando que la FK {@code fk_transacciones_publicacion} (V7) falle
+     * en el commit con un error interno enmascarado. La verificación de propiedad precede a la de
+     * transacciones: un usuario no autorizado recibe su rechazo sin revelar información del negocio.</p>
+     *
+     * <p>El evento append-only {@code CREADA} queda conservado con {@code publicacion_id = NULL}
+     * gracias a la acción referencial {@code ON DELETE SET NULL} de la migración V16
+     * (constitution, principio 2). El histórico de motivos de moderación (V17,
+     * {@code publicacion_motivos_historicos}) también sobrevive con {@code publicacion_id = NULL}.</p>
+     *
+     * <p>Desde PHA12TSK07 (decisión de Lino 2026-08-23, plan.md "PHA12", fila "Endurecimiento
+     * TOCTOU compra-vs-delete"; riesgo declarado en {@code PHA12TSK01-L01-programmer.md},
+     * Riesgos §1) la carga inicial usa
+     * {@link PublicacionRepository#findByIdWithLock}, que adquiere un lock pesimista
+     * {@code PESSIMISTIC_WRITE} ({@code SELECT ... FOR UPDATE} en PostgreSQL) sobre la fila de la
+     * publicación ANTES de evaluar propiedad y transacciones: un INSERT concurrente en
+     * {@code transacciones} (webhook {@code payment_intent.succeeded}) debe bloquear contra ese
+     * lock de la fila padre y serializa, cerrando la ventana entre {@code existsByPublicacionId}
+     * y {@code delete}. Los códigos observables no cambian (204 sin transacciones, 409 con
+     * transacciones, 403 no dueño, 404 inexistente).</p>
      *
      * @param publicacionId ID de la publicación a eliminar
      * @param usuarioId ID del usuario vendedor solicitante
      * @throws PublicacionNoEncontradaException si la publicación no existe
      * @throws NoEsElPropietarioException si el usuarioId no coincide con el dueño
-     * @throws PublicacionNoEliminableException si la publicación no está en estado {@link EstadoPublicacion#RECHAZADA}
+     * @throws PublicacionConTransaccionesException si la publicación tiene al menos una transacción asociada
      */
     @Transactional
     public void eliminarPublicacion(Long publicacionId, Long usuarioId) {
-        Publicacion publicacion = obtenerPublicacionPorId(publicacionId);
+        Publicacion publicacion = publicacionRepository.findByIdWithLock(publicacionId)
+            .orElseThrow(() -> new PublicacionNoEncontradaException("Publicación con ID " + publicacionId + " no encontrada"));
 
         if (!publicacion.getUsuario().getId().equals(usuarioId)) {
             throw new NoEsElPropietarioException(
@@ -440,13 +626,13 @@ public class PublicacionService {
             );
         }
 
-        if (publicacion.getEstado() != EstadoPublicacion.RECHAZADA) {
-            throw new PublicacionNoEliminableException(
-                "Solo se puede eliminar definitivamente una publicación en estado 'RECHAZADA'. Estado actual: " + publicacion.getEstado()
+        if (transaccionRepository.existsByPublicacionId(publicacionId)) {
+            throw new PublicacionConTransaccionesException(
+                "La publicación con ID " + publicacionId + " no puede eliminarse porque tiene al menos una transacción asociada"
             );
         }
 
-        logger.info("Eliminación definitiva de publicación rechazada ID {}", publicacionId);
+        logger.info("Eliminación definitiva de publicación ID {} en estado {}", publicacionId, publicacion.getEstado());
 
         publicacionRepository.delete(publicacion);
     }

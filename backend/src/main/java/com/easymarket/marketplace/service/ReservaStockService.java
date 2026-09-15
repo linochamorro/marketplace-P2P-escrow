@@ -76,6 +76,16 @@ public class ReservaStockService {
      * "solo la de timestamp más temprano obtiene la reserva; la otra es rechazada por falta de
      * stock").</p>
      *
+     * <p><strong>Sin rollback ante {@link StockAgotadoException} (PHA16TSK02):</strong> la
+     * transacción declara {@code noRollbackFor = StockAgotadoException.class} porque el
+     * orquestador ({@code ProcesadorEventosWebhookService}) invoca este método dentro de su
+     * propia transacción del evento y trata al perdedor persistiendo una orden durable de
+     * reembolso en la MISMA transacción: si la excepción marcara rollback-only, el commit del
+     * orquestador fallaría con {@code UnexpectedRollbackException} y ni la orden ni la marca del
+     * evento sobrevivirían. Antes del lanzamiento no se escribió nada (el decremento no afectó
+     * filas), por lo que no hacer rollback no deja efectos parciales; cualquier otra excepción
+     * conserva la semántica de rollback normal.</p>
+     *
      * @param compradorId ID del usuario comprador (referencia FK; la integridad la garantiza la
      *                    constraint de base de datos de la migración V7)
      * @param publicacionId ID de la publicación a comprar
@@ -84,7 +94,7 @@ public class ReservaStockService {
      * @throws PublicacionNoEncontradaException si la publicación no existe (no debería ocurrir si
      *         el decremento afectó filas, pero se cubre la integridad referencial de forma defensiva)
      */
-    @Transactional
+    @Transactional(noRollbackFor = StockAgotadoException.class)
     public Transaccion reservarStock(Long compradorId, Long publicacionId) {
         int filasAfectadas = publicacionRepository.decrementarStockSiDisponible(publicacionId);
         if (filasAfectadas == 0) {

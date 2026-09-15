@@ -196,6 +196,24 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Maneja intentos de eliminar una publicación cuyo estado no lo permite (solo RECHAZADA, Story 3).
+     *
+     * <p>La eliminación de una publicación en cualquier estado distinto de {@code RECHAZADA} (por
+     * ejemplo, APROBADA o PENDIENTE_REVISION) es un conflicto de dominio: el vendedor solo puede
+     * eliminar lo que fue rechazado por moderación (spec.md, Story 3; plan.md). Se traduce a
+     * HTTP 409 Conflict con el mensaje literal de la excepción.</p>
+     *
+     * @param ex excepción de publicación no eliminable
+     * @return {@link ResponseEntity} con código HTTP 409 Conflict
+     */
+    @ExceptionHandler(PublicacionNoEliminableException.class)
+    public ResponseEntity<Map<String, String>> handlePublicacionNoEliminable(PublicacionNoEliminableException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
      * Maneja la omisión del motivo en transiciones de estado de publicación que lo exigen.
      *
      * @param ex excepción de motivo requerido
@@ -218,6 +236,24 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleNoEsElPropietario(NoEsElPropietarioException ex) {
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja el intento de eliminar una publicación que tiene al menos una transacción asociada.
+     *
+     * <p>Decisión de Lino 2026-08-23 (plan.md, "PHA12 — Eliminación de publicaciones con
+     * transacciones asociadas"): la publicación NO se elimina y el cliente recibe un conflicto
+     * explícito con el mensaje de dominio, en lugar del error interno enmascarado que producía
+     * la FK {@code fk_transacciones_publicacion} (V7) al fallar en el commit.</p>
+     *
+     * @param ex excepción de publicación con transacciones asociadas
+     * @return {@link ResponseEntity} con código HTTP 409 Conflict y el mensaje en el cuerpo JSON
+     */
+    @ExceptionHandler(PublicacionConTransaccionesException.class)
+    public ResponseEntity<Map<String, String>> handlePublicacionConTransacciones(PublicacionConTransaccionesException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
                 .body(Map.of("mensaje", ex.getMessage()));
     }
 
@@ -534,6 +570,44 @@ public class GlobalExceptionHandler {
             MotivoResolucionDisputaObligatorioException ex) {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja operaciones sobre notificaciones in-app cuyo identificador no existe.
+     *
+     * <p>Corresponde a {@code PATCH /notificaciones/{id}/leer} (PHA09TSK05, recuperado en
+     * PHA12TSK04) cuando {@code NotificacionService.marcarComoLeida} no encuentra la
+     * notificación solicitada.</p>
+     *
+     * @param ex excepción de notificación no encontrada
+     * @return {@link ResponseEntity} con código HTTP 404 Not Found y el mensaje de dominio en el
+     *         cuerpo JSON bajo la clave {@code mensaje}
+     */
+    @ExceptionHandler(NotificacionNoEncontradaException.class)
+    public ResponseEntity<Map<String, String>> handleNotificacionNoEncontrada(
+            NotificacionNoEncontradaException ex) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of("mensaje", ex.getMessage()));
+    }
+
+    /**
+     * Maneja intentos de operar sobre una notificación in-app por parte de un usuario que no es
+     * su destinatario.
+     *
+     * <p>Corresponde a {@code PATCH /notificaciones/{id}/leer} (PHA09TSK05, recuperado en
+     * PHA12TSK04) cuando el usuario autenticado difiere del destinatario de la notificación; la
+     * notificación permanece sin mutar.</p>
+     *
+     * @param ex excepción de usuario no autorizado sobre la notificación
+     * @return {@link ResponseEntity} con código HTTP 403 Forbidden y el mensaje de dominio en el
+     *         cuerpo JSON bajo la clave {@code mensaje}
+     */
+    @ExceptionHandler(UsuarioNoAutorizadoException.class)
+    public ResponseEntity<Map<String, String>> handleUsuarioNoAutorizado(UsuarioNoAutorizadoException ex) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
                 .body(Map.of("mensaje", ex.getMessage()));
     }
 }

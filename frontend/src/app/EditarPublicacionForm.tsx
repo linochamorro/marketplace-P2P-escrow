@@ -16,6 +16,8 @@ export interface PublicacionAEditar {
   stock: number;
   descripcion: string;
   estado: string;
+  /** Nombre de archivo de imagen (sin prefijo de URL); cadena vacía cuando no hay imagen (PHA09TSK04). */
+  imagenFilename?: string | null;
 }
 
 /**
@@ -26,6 +28,8 @@ export interface EditarPublicacionFormProps {
   publicacionInicial: PublicacionAEditar;
   /** Callback opcional ejecutado al guardar exitosamente la edición */
   onSuccess?: () => void;
+  /** Callback opcional ejecutado al cancelar; cierra el panel sin enviar PATCH (PHA09TSK04) */
+  onCancel?: () => void;
 }
 
 /**
@@ -36,10 +40,11 @@ export interface EditarPublicacionFormProps {
  * @param props Props del componente {@link EditarPublicacionFormProps}
  * @returns Elemento JSX con el formulario de edición de publicación
  */
-export default function EditarPublicacionForm({ publicacionInicial, onSuccess }: EditarPublicacionFormProps) {
+export default function EditarPublicacionForm({ publicacionInicial, onSuccess, onCancel }: EditarPublicacionFormProps) {
   const [precioInput, setPrecioInput] = useState<string>((publicacionInicial.precio / 100).toFixed(2));
   const [stockInput, setStockInput] = useState<string>(publicacionInicial.stock.toString());
   const [descripcion, setDescripcion] = useState<string>(publicacionInicial.descripcion);
+  const [imagenFilename, setImagenFilename] = useState<string>(publicacionInicial.imagenFilename ?? '');
 
   const [errors, setErrors] = useState<{ precio?: string; stock?: string; general?: string }>({});
   const [exito, setExito] = useState<string | null>(null);
@@ -76,7 +81,8 @@ export default function EditarPublicacionForm({ publicacionInicial, onSuccess }:
     const payload = {
       precio: precioEnCentavos,
       stock: stockNumerico,
-      descripcion
+      descripcion,
+      imagenFilename
     };
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
@@ -147,7 +153,7 @@ export default function EditarPublicacionForm({ publicacionInicial, onSuccess }:
       {/* Precio Field */}
       <div>
         <label htmlFor="edit-precio" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-          Precio (USD)
+          Precio (S/)
         </label>
         <input
           id="edit-precio"
@@ -197,14 +203,41 @@ export default function EditarPublicacionForm({ publicacionInicial, onSuccess }:
         />
       </div>
 
-      {/* Submit Button */}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-full py-2.5 px-4 bg-[#0F172A] hover:bg-slate-800 text-white font-medium rounded text-sm transition-colors border border-slate-900 disabled:opacity-50"
-      >
-        {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
-      </button>
+      {/* Imagen Field (PHA09TSK04) */}
+      <div>
+        <label htmlFor="edit-imagen" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
+          Imagen (archivo)
+        </label>
+        <input
+          id="edit-imagen"
+          type="text"
+          aria-label="Imagen (archivo)"
+          placeholder="producto.jpg"
+          value={imagenFilename}
+          onChange={(e) => setImagenFilename(e.target.value)}
+          className="w-full px-3 py-2 bg-white border border-slate-300 rounded text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-slate-200 focus:border-[#0F172A]"
+        />
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex gap-3">
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="flex-1 py-2.5 px-4 bg-[#0F172A] hover:bg-slate-800 text-white font-medium rounded text-sm transition-colors border border-slate-900 disabled:opacity-50"
+        >
+          {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+        </button>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 py-2.5 px-4 bg-white hover:bg-slate-50 text-black font-medium rounded text-sm transition-colors border border-slate-300"
+          >
+            Cancelar
+          </button>
+        )}
+      </div>
     </form>
   );
 }

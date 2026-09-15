@@ -112,9 +112,15 @@ class FlywayMigrationV14Tests {
     /**
      * Inserts an in-app notification with an optional transaction association.
      *
+     * <p>Since PHA12TSK04 the inserted type is {@code AVISO_TRANSACCION_ABIERTA}, one of the
+     * values allowed by the V19 CHECK constraint {@code chk_notificaciones_tipo_valido}; the
+     * former synthetic {@code PRUEBA_V14_<sufijo>} type violated that constraint and made both
+     * insertion tests error out. Only type validity matters to these migration tests, so a single
+     * fixed allowed value is used while the unique suffix stays in the message.</p>
+     *
      * @param usuarioId identifier of the existing recipient user
      * @param transaccionId identifier of the associated transaction, or {@code null} when unrelated
-     * @param sufijo unique value appended to the test message and type
+     * @param sufijo unique value appended to the test message
      * @return identifier of the inserted notification
      */
     private Long insertarNotificacion(Long usuarioId, Long transaccionId, String sufijo) {
@@ -125,7 +131,7 @@ class FlywayMigrationV14Tests {
             usuarioId,
             transaccionId,
             "Aviso de prueba V14 " + sufijo,
-            "PRUEBA_V14_" + sufijo,
+            "AVISO_TRANSACCION_ABIERTA",
             OffsetDateTime.now()
         );
     }

@@ -39,6 +39,11 @@ public class Notificacion {
     @JoinColumn(name = "transaccion_id")
     private Transaccion transaccion;
 
+    /** Optional publication whose pending action originated this projection. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "publicacion_id")
+    private Publicacion publicacion;
+
     /** Literal notification content displayed to the recipient. */
     @Column(name = "mensaje", nullable = false, columnDefinition = "TEXT")
     private String mensaje;
@@ -84,7 +89,23 @@ public class Notificacion {
      */
     public Notificacion(Usuario usuario, Transaccion transaccion, String mensaje, String tipo,
                         ZonedDateTime createdAt) {
+        this(usuario, null, transaccion, mensaje, tipo, createdAt);
+    }
+
+    /**
+     * Creates an unread notification associated with a publication or transaction.
+     *
+     * @param usuario recipient user
+     * @param publicacion pending publication, or {@code null}
+     * @param transaccion originating transaction, or {@code null}
+     * @param mensaje literal message presented to the recipient
+     * @param tipo stable notification category
+     * @param createdAt instant at which the projection is created
+     */
+    public Notificacion(Usuario usuario, Publicacion publicacion, Transaccion transaccion,
+                        String mensaje, String tipo, ZonedDateTime createdAt) {
         this.usuario = usuario;
+        this.publicacion = publicacion;
         this.transaccion = transaccion;
         this.mensaje = mensaje;
         this.tipo = tipo;
@@ -108,6 +129,24 @@ public class Notificacion {
      */
     public Transaccion getTransaccion() {
         return transaccion;
+    }
+
+    /**
+     * Gets the publication optionally associated with this notification.
+     *
+     * @return pending publication, or {@code null} for non-publication notices
+     */
+    public Publicacion getPublicacion() {
+        return publicacion;
+    }
+
+    /**
+     * Associates this projection with a publication slot.
+     *
+     * @param publicacion pending publication association
+     */
+    public void setPublicacion(Publicacion publicacion) {
+        this.publicacion = publicacion;
     }
 
     /**
@@ -138,6 +177,15 @@ public class Notificacion {
     }
 
     /**
+     * Marks the notification as read or unread (PHA09TSK05: "Marcar como leída").
+     *
+     * @param leida nuevo valor del marcador de lectura persistido en la columna {@code leida}
+     */
+    public void setLeida(boolean leida) {
+        this.leida = leida;
+    }
+
+    /**
      * Gets the stable notification category.
      *
      * @return notification type
@@ -153,5 +201,23 @@ public class Notificacion {
      */
     public ZonedDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    /**
+     * Updates the projection timestamp when an existing pending slot is reactivated.
+     *
+     * @param createdAt new timestamp for the reactivated projection
+     */
+    public void setCreatedAt(ZonedDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    /**
+     * Updates the displayed message when an existing pending slot is reused.
+     *
+     * @param mensaje new literal notification content
+     */
+    public void setMensaje(String mensaje) {
+        this.mensaje = mensaje;
     }
 }

@@ -13,6 +13,7 @@ import com.easymarket.marketplace.repository.PublicacionEventoRepository;
 import com.easymarket.marketplace.repository.PublicacionRepository;
 import com.easymarket.marketplace.repository.SubcategoriaRepository;
 import com.easymarket.marketplace.repository.UsuarioRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +27,11 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,18 +57,24 @@ class PublicacionCreacionAuditoriaTests {
     @Mock private PublicacionEventoRepository publicacionEventoRepository;
     /** Repositorio del aviso in-app dirigido al ADMIN. */
     @Mock private NotificacionRepository notificacionRepository;
+    /** Servicio de notificaciones accionables por el que pasa la emisión del aviso (PHA09TSK05). */
+    @Mock private NotificacionService notificacionService;
+    /** Repositorio del histórico append-only de motivos de moderación (dependencia del constructor). */
+    @Mock private com.easymarket.marketplace.repository.PublicacionMotivoHistoricoRepository publicacionMotivoHistoricoRepository;
+    /** Gestor de entidades JPA: en la unidad la releída post-guardado del trigger de V22 se invoca como no-op (PHA15TSK13). */
+    @Mock private EntityManager entityManager;
     /** Servicio bajo prueba. */
     @InjectMocks private PublicacionService publicacionService;
 
     /**
-     * Verifica que una creación válida guarde la publicación, el evento CREADA y el aviso literal
-     * dirigido al ADMIN único.
+     * Verifica que una creación válida guarde la publicación, el evento CREADA y emita el aviso
+     * literal dirigido al ADMIN único a través de {@code NotificacionService} (arquitectura de
+     * PHA09TSK05: la creación de notificaciones está centralizada en ese servicio).
      */
     @Test
     @DisplayName("Crear publicación guarda CREADA y NUEVA_PUBLICACION_PENDIENTE literal para ADMIN")
     void crearPublicacion_Valida_GuardaPublicacionEventoYAvisoParaAdmin() {
         Usuario vendedor = usuario("vendedor@example.com", Rol.USUARIO, 10L);
-        Usuario admin = usuario("admin@example.com", Rol.ADMIN, 20L);
         Categoria categoria = new Categoria("Tecnología");
         categoria.setId(30L);
         Subcategoria subcategoria = new Subcategoria(categoria, "Laptops");
@@ -70,25 +82,31 @@ class PublicacionCreacionAuditoriaTests {
         Publicacion persistida = new Publicacion(vendedor, categoria, subcategoria, 150000L, 2, "Portátil");
         persistida.setId(50L);
         when(usuarioRepository.findById(10L)).thenReturn(Optional.of(vendedor));
-        when(usuarioRepository.findByRol(Rol.ADMIN)).thenReturn(Optional.of(admin));
+        // La búsqueda del ADMIN vive hoy dentro de NotificacionService (mockeado); se deja lenient
+        // por si la implementación vuelve a resolverlo en el servicio de publicaciones.
+        lenient().when(usuarioRepository.findByRol(Rol.ADMIN)).thenReturn(Optional.empty());
         when(categoriaRepository.findById(30L)).thenReturn(Optional.of(categoria));
         when(subcategoriaRepository.findById(40L)).thenReturn(Optional.of(subcategoria));
         when(publicacionRepository.save(any(Publicacion.class))).thenReturn(persistida);
+        lenient().when(notificacionService.crearNotificacionAdmin(anyString(), anyString(), any(), any()))
+                .thenReturn(mock(Notificacion.class));
 
-        Publicacion resultado = publicacionService.crearPublicacion(10L, 30L, 40L, 150000L, 2, "Portátil");
+        Publicacion resultado = publicacionService.crearPublicacion(10L, 30L, 40L, 150000L, 2, "Portátil", null);
 
         ArgumentCaptor<PublicacionEvento> evento = ArgumentCaptor.forClass(PublicacionEvento.class);
-        ArgumentCaptor<Notificacion> aviso = ArgumentCaptor.forClass(Notificacion.class);
         assertThat(resultado).isSameAs(persistida);
         verify(publicacionRepository).save(any(Publicacion.class));
         verify(publicacionEventoRepository).save(evento.capture());
-        verify(notificacionRepository).save(aviso.capture());
+        verify(notificacionService).crearNotificacionAdmin(
+                eq("PUBLICACION_PENDIENTE_APROBAR"),
+                eq("Nueva publicación pendiente de aprobación: #50"),
+                any(Publicacion.class),
+                isNull(),
+                any()
+        );
         assertThat(evento.getValue().getPublicacion()).isSameAs(persistida);
         assertThat(evento.getValue().getActor()).isSameAs(vendedor);
         assertThat(evento.getValue().getTipo()).isEqualTo("CREADA");
-        assertThat(aviso.getValue().getUsuario()).isSameAs(admin);
-        assertThat(aviso.getValue().getTipo()).isEqualTo("NUEVA_PUBLICACION_PENDIENTE");
-        assertThat(aviso.getValue().getMensaje()).isEqualTo("Nueva publicación pendiente de revisión: #50");
     }
 
     /**

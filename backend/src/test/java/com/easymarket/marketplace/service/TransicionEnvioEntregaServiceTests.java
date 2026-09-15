@@ -3,12 +3,14 @@ package com.easymarket.marketplace.service;
 import com.easymarket.marketplace.exception.ActorNoEsVendedorTransaccionException;
 import com.easymarket.marketplace.exception.TransicionEstadoTransaccionInvalidaException;
 import com.easymarket.marketplace.model.EstadoTransaccion;
+import com.easymarket.marketplace.model.Notificacion;
 import com.easymarket.marketplace.model.Publicacion;
 import com.easymarket.marketplace.model.Transaccion;
 import com.easymarket.marketplace.model.TransaccionEvento;
 import com.easymarket.marketplace.model.Usuario;
 import com.easymarket.marketplace.repository.TransaccionEventoRepository;
 import com.easymarket.marketplace.repository.TransaccionRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +25,10 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -35,11 +41,17 @@ import static org.mockito.Mockito.when;
  * que únicamente el dueño de la publicación puede ejecutar las transiciones y que cada transición
  * persiste su evento de auditoría append-only. También verifica que la prueba de entrega opcional
  * se persiste exclusivamente en la transacción al marcar entregado, sin ocupar el motivo del
- * evento. La prueba no cubre confirmación, saldo, reclamos ni API, porque pertenecen a tareas
- * posteriores de {@code tasks.md}.</p>
+ * evento. Desde PHA12TSK03 (recuperación de PHA09TSK05) verifica además que cada transición
+ * exitosa emite, dentro de la misma transacción, las notificaciones accionables ENVIO_MARCADO o
+ * ENTREGA_MARCADA al comprador y al vendedor, con los mensajes dirigidos ("tu compra"/"tu venta")
+ * que la UI enruta, y que ningún rechazo temprano emite notificaciones. La prueba no cubre
+ * confirmación, saldo, reclamos ni API, porque pertenecen a tareas posteriores de
+ * {@code tasks.md}.</p>
  */
 @ExtendWith(MockitoExtension.class)
 class TransicionEnvioEntregaServiceTests {
+
+    private static final Long COMPRADOR_ID = 20L;
 
     @Mock
     private TransaccionRepository transaccionRepository;
@@ -47,8 +59,29 @@ class TransicionEnvioEntregaServiceTests {
     @Mock
     private TransaccionEventoRepository transaccionEventoRepository;
 
+    @Mock
+    private NotificacionService notificacionService;
+
     @InjectMocks
     private TransicionEnvioEntregaService transicionEnvioEntregaService;
+
+    /**
+     * Configura el mock de {@link NotificacionService} en modo leniente para que responda a cada
+     * emisión accionable construyendo la instancia real de {@link Notificacion} con los argumentos
+     * recibidos (patrón de PHA09TSK05-L02). Es leniente porque los tests de rechazo temprano nunca
+     * llegan a emitir notificaciones y, sin {@code lenient()}, Mockito reportaría stubbings
+     * innecesarios para esas pruebas.
+     */
+    @BeforeEach
+    void setUp() {
+        lenient().when(notificacionService.crearNotificacionUsuario(any(), any(), any(), any(), any()))
+            .thenAnswer(invocation -> new Notificacion(
+                invocation.getArgument(0),
+                invocation.getArgument(3),
+                invocation.getArgument(2),
+                invocation.getArgument(1),
+                invocation.getArgument(4)));
+    }
 
     /**
      * Verifica que no se puede marcar como enviado una transacción que ya está en estado
@@ -67,6 +100,7 @@ class TransicionEnvioEntregaServiceTests {
 
         verify(transaccionRepository, never()).save(any());
         verify(transaccionEventoRepository, never()).save(any());
+        verificarSinNotificaciones();
     }
 
     /**
@@ -85,6 +119,7 @@ class TransicionEnvioEntregaServiceTests {
 
         verify(transaccionRepository, never()).save(any());
         verify(transaccionEventoRepository, never()).save(any());
+        verificarSinNotificaciones();
     }
 
     /**
@@ -112,6 +147,8 @@ class TransicionEnvioEntregaServiceTests {
         assertThat(evento.getEstadoDestino()).isEqualTo(EstadoTransaccion.ENVIADO);
         assertThat(evento.getMotivo()).isNull();
         assertThat(evento.getCreatedAt()).isNotNull();
+        verificarNotificacion(resultado.getComprador(), "ENVIO_MARCADO", "tu compra", resultado);
+        verificarNotificacion(vendedor, "ENVIO_MARCADO", "tu venta", resultado);
     }
 
     /**
@@ -142,6 +179,8 @@ class TransicionEnvioEntregaServiceTests {
         assertThat(evento.getEstadoDestino()).isEqualTo(EstadoTransaccion.ENTREGADO);
         assertThat(evento.getMotivo()).isNull();
         assertThat(evento.getCreatedAt()).isNotNull();
+        verificarNotificacion(resultado.getComprador(), "ENTREGA_MARCADA", "tu compra", resultado);
+        verificarNotificacion(vendedor, "ENTREGA_MARCADA", "tu venta", resultado);
     }
 
     /**
@@ -171,6 +210,8 @@ class TransicionEnvioEntregaServiceTests {
         assertThat(evento.getEstadoDestino()).isEqualTo(EstadoTransaccion.ENTREGADO);
         assertThat(evento.getMotivo()).isNull();
         assertThat(evento.getCreatedAt()).isNotNull();
+        verificarNotificacion(resultado.getComprador(), "ENTREGA_MARCADA", "tu compra", resultado);
+        verificarNotificacion(vendedor, "ENTREGA_MARCADA", "tu venta", resultado);
     }
 
     /**
@@ -189,6 +230,7 @@ class TransicionEnvioEntregaServiceTests {
 
         verify(transaccionRepository, never()).save(any());
         verify(transaccionEventoRepository, never()).save(any());
+        verificarSinNotificaciones();
     }
 
     /**
@@ -208,6 +250,32 @@ class TransicionEnvioEntregaServiceTests {
 
         verify(transaccionRepository, never()).save(any());
         verify(transaccionEventoRepository, never()).save(any());
+        verificarSinNotificaciones();
+    }
+
+    /**
+     * Verifica que el servicio emitió exactamente una notificación accionable para el destinatario
+     * y tipo indicados, asociada a la transición persistida y con la expresión de enrutamiento
+     * ("tu compra" para el comprador, "tu venta" para el vendedor) que la futura UI de
+     * notificaciones (PHA12TSK05) usa para derivar el destino del enlace.
+     *
+     * @param destinatario usuario que debe recibir la emisión
+     * @param tipo tipo de notificación esperado
+     * @param expresionEnrutamiento fragmento literal que el mensaje debe contener
+     * @param transaccion transacción transicionada asociada a la emisión
+     */
+    private void verificarNotificacion(Usuario destinatario, String tipo, String expresionEnrutamiento,
+                                        Transaccion transaccion) {
+        verify(notificacionService).crearNotificacionUsuario(same(destinatario), eq(tipo),
+            contains(expresionEnrutamiento), same(transaccion), any(ZonedDateTime.class));
+    }
+
+    /**
+     * Verifica que un rechazo temprano no emitió ninguna notificación accionable.
+     */
+    private void verificarSinNotificaciones() {
+        verify(notificacionService, never()).crearNotificacionUsuario(any(), any(), any(), any(), any());
+        verify(notificacionService, never()).crearNotificacionAdmin(any(), any(), any(), any());
     }
 
     /**
@@ -223,11 +291,24 @@ class TransicionEnvioEntregaServiceTests {
     }
 
     /**
-     * Crea una transacción persistente simulada, asociada a una publicación del vendedor indicado.
+     * Crea un comprador persistente simulado para las pruebas.
+     *
+     * @param id ID persistente a asignar al comprador
+     * @return usuario comprador con el ID indicado
+     */
+    private Usuario comprador(Long id) {
+        Usuario comprador = new Usuario();
+        comprador.setId(id);
+        return comprador;
+    }
+
+    /**
+     * Crea una transacción persistente simulada, asociada a una publicación del vendedor indicado
+     * y a un comprador fijo de las pruebas.
      *
      * @param vendedor dueño de la publicación de la transacción
      * @param estado estado inicial requerido para el escenario de prueba
-     * @return transacción configurada con ID, publicación y estado indicados
+     * @return transacción configurada con ID, comprador, publicación y estado indicados
      */
     private Transaccion transaccion(Usuario vendedor, EstadoTransaccion estado) {
         Publicacion publicacion = new Publicacion();
@@ -235,6 +316,7 @@ class TransicionEnvioEntregaServiceTests {
 
         Transaccion transaccion = new Transaccion();
         transaccion.setId(100L);
+        transaccion.setComprador(comprador(COMPRADOR_ID));
         transaccion.setPublicacion(publicacion);
         transaccion.setEstado(estado);
         transaccion.setFechaReservada(ZonedDateTime.now());

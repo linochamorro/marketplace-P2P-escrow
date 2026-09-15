@@ -1,13 +1,39 @@
 package com.easymarket.marketplace.dto;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+
 import java.util.Objects;
 
 /**
  * Objeto de transferencia de datos (DTO) para la solicitud de registro de usuarios ({@code POST /auth/registro}).
+ *
+ * <p>La validación de entrada (PHA16TSK06; informe de auditoría 2026-09-13, hallazgo A5)
+ * rechaza con HTTP 400 los cuerpos sin email o sin password y el email con formato
+ * inválido, antes de que el dominio aplique sus propias reglas (política de contraseña
+ * ≥8 caracteres, unicidad de email). Los mensajes están en español, consistentes con
+ * el precedente de {@code CategoriaRequestDto}.</p>
  */
 public class RegistroRequestDto {
 
+    /**
+     * Correo electrónico del nuevo usuario.
+     *
+     * <p>No puede ser nulo, vacío ni estar compuesto solo por blancos
+     * ({@code @NotBlank}), y debe tener formato de email válido ({@code @Email}).</p>
+     */
+    @NotBlank(message = "El email no puede estar vacío")
+    @Email(message = "El email debe tener un formato válido")
     private String email;
+
+    /**
+     * Contraseña en texto plano del nuevo usuario.
+     *
+     * <p>No puede ser nula, vacía ni estar compuesta solo por blancos
+     * ({@code @NotBlank}). La longitud mínima (≥8 caracteres) la valida el
+     * dominio en {@code RegistroService}, no este DTO.</p>
+     */
+    @NotBlank(message = "La contraseña no puede estar vacía")
     private String password;
 
     /**

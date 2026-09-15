@@ -1,6 +1,7 @@
 'use client';
 
 import { loadStripe, type Stripe, type StripeElement, type StripeElements } from '@stripe/stripe-js';
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 
 /**
@@ -86,15 +87,22 @@ function buildReturnUrl(): string {
 /**
  * CompraButton — Flujo reusable de compra con idempotencia frontend y Stripe.js.
  *
- * Alcance PHA03TSK11: genera una única `Idempotency-Key` al montar la instancia,
- * llama `POST /compras` con credenciales incluidas, muestra errores de auto-compra
- * o stock agotado usando el mensaje del backend y, solo ante respuesta OK, monta
- * un PaymentElement embebido con `@stripe/stripe-js` para confirmar el pago sin
- * salir del sitio (`redirect: 'if_required'`). No integra catálogo ni datos fake;
- * queda listo para ser consumido por la UI de publicaciones futura.
+ * Alcance PHA03TSK11 + PHA15TSK07: genera una única `Idempotency-Key` al montar
+ * la instancia, llama `POST /compras` con credenciales incluidas, muestra errores
+ * de auto-compra o stock agotado usando el mensaje del backend y, solo ante
+ * respuesta OK, monta un PaymentElement embebido con `@stripe/stripe-js` para
+ * confirmar el pago sin salir del sitio (`redirect: 'if_required'`).
+ *
+ * Estado de pago confirmado (PHA15TSK07, plan.md "Estados visibles del pago
+ * (CompraButton)", decisión Lino 2026-08-31): tras `confirmPayment` exitoso el
+ * PaymentElement y el botón "Confirmar pago" desaparecen, se muestra el mensaje
+ * final aprobado con `role="status"` y un enlace `next/link` a `/compras`. El
+ * copy es 100% libre de jerga técnica: sin "webhook", sin "backend" y sin
+ * exposición del ID crudo del PaymentIntent.
  *
  * @param props Propiedades mínimas de compra, incluyendo `publicacionId` entero.
- * @returns Elemento JSX con card institucional, botón Comprar, PaymentElement y errores.
+ * @returns Elemento JSX con card institucional, botón Comprar, PaymentElement y
+ *          estado final de pago confirmado con enlace a Mis compras.
  */
 export default function CompraButton({
   publicacionId,
@@ -111,7 +119,11 @@ export default function CompraButton({
   const [isStripeLoading, setIsStripeLoading] = useState<boolean>(false);
   const [isConfirming, setIsConfirming] = useState<boolean>(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
+  /**
+   * true tras `confirmPayment` exitoso (PHA15TSK07): oculta el PaymentElement y
+   * el botón "Confirmar pago" para mostrar el estado final con enlace a /compras.
+   */
+  const [pagoConfirmado, setPagoConfirmado] = useState<boolean>(false);
   const [paymentReady, setPaymentReady] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -216,7 +228,6 @@ export default function CompraButton({
 
       const data = (await response.json()) as CompraResponseDto;
       setClientSecret(data.clientSecret);
-      setPaymentIntentId(data.paymentIntentId);
       onCompraCreada?.(data);
     } catch {
       setErrorMessage('Error de red al preparar la compra.');
@@ -228,6 +239,11 @@ export default function CompraButton({
 
   /**
    * Confirma el pago con Stripe.js y muestra cualquier error devuelto por Stripe.
+   *
+   * En éxito activa el estado de pago confirmado (`pagoConfirmado`): oculta el
+   * formulario de pago, muestra el mensaje final aprobado y conserva el llamado
+   * a `onPagoConfirmado` intacto (PHA15TSK07). Ante error, el formulario
+   * permanece visible para permitir el reintento del comprador.
    *
    * @returns Promesa resuelta cuando Stripe responde a `confirmPayment`.
    */
@@ -253,7 +269,8 @@ export default function CompraButton({
         return;
       }
 
-      setSuccessMessage('Pago confirmado. La reserva se completará al procesar Stripe el webhook.');
+      setSuccessMessage('¡Pago recibido! Tu compra quedó registrada. En unos segundos verás su estado en Mis compras.');
+      setPagoConfirmado(true);
       onPagoConfirmado?.();
     } catch {
       setErrorMessage('Error al confirmar el pago con Stripe.');
@@ -268,7 +285,7 @@ export default function CompraButton({
         <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Compra segura</p>
         <h2 className="text-xl font-semibold text-[#0F172A] tracking-tight">Escrow EasyMarket</h2>
         <p className="text-sm text-slate-600">
-          Prepara el pago con Stripe y reserva la compra solo cuando el backend confirme el evento.
+          Paga con seguridad: tus fondos quedan protegidos hasta que confirmes la entrega del producto.
         </p>
       </div>
 
@@ -295,11 +312,8 @@ export default function CompraButton({
         </button>
       )}
 
-      {clientSecret && (
+      {clientSecret && !pagoConfirmado && (
         <div className="space-y-4">
-          <div className="text-xs font-mono text-slate-500">
-            PaymentIntent: {paymentIntentId}
-          </div>
           <div
             ref={paymentContainerRef}
             className="min-h-24 rounded border border-slate-200 bg-slate-50 p-3"
@@ -314,6 +328,15 @@ export default function CompraButton({
             {isConfirming ? 'Confirmando pago...' : isStripeLoading ? 'Cargando pago...' : 'Confirmar pago'}
           </button>
         </div>
+      )}
+
+      {pagoConfirmado && (
+        <Link
+          href="/compras"
+          className="inline-flex w-full items-center justify-center py-2.5 px-4 bg-[#0F172A] hover:bg-slate-800 text-white font-medium rounded text-sm transition-colors border border-slate-900"
+        >
+          Ver mis compras
+        </Link>
       )}
     </section>
   );

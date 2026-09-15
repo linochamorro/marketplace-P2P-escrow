@@ -6,6 +6,7 @@ import com.easymarket.marketplace.model.Publicacion;
  * DTO de respuesta HTTP para la exposición de publicaciones en el API (Story 1, spec.md).
  *
  * @param id identificador único de la publicación
+ * @param codigoProducto código de negocio autogenerado por el Sistema en formato {YYYY}{PREF}{NNNNN} (PHA15TSK13)
  * @param precio monto en centavos de moneda entera
  * @param stock unidades disponibles
  * @param estado estado actual en el ciclo de vida de la publicación (ej. "PENDIENTE_REVISION")
@@ -13,10 +14,12 @@ import com.easymarket.marketplace.model.Publicacion;
  * @param categoriaId ID de la categoría raíz
  * @param subcategoriaId ID de la subcategoría
  * @param usuarioId ID del usuario vendedor propietario de la publicación
+ * @param usuarioEmail email del vendedor propietario (PHA09TSK02), mostrado en las cards del marketplace
  * @param imagenFilename nombre de archivo de imagen (sin prefijo de URL); puede ser {@code null}
  */
 public record PublicacionResponseDto(
         Long id,
+        String codigoProducto,
         Long precio,
         Integer stock,
         String estado,
@@ -24,6 +27,7 @@ public record PublicacionResponseDto(
         Long categoriaId,
         Long subcategoriaId,
         Long usuarioId,
+        String usuarioEmail,
         String imagenFilename
 ) {
     /**
@@ -35,6 +39,7 @@ public record PublicacionResponseDto(
     public static PublicacionResponseDto fromEntity(Publicacion publicacion) {
         return new PublicacionResponseDto(
                 publicacion.getId(),
+                publicacion.getCodigoProducto(),
                 publicacion.getPrecio(),
                 publicacion.getStock(),
                 publicacion.getEstado().name(),
@@ -42,6 +47,7 @@ public record PublicacionResponseDto(
                 publicacion.getCategoria().getId(),
                 publicacion.getSubcategoria().getId(),
                 publicacion.getUsuario().getId(),
+                publicacion.getUsuario().getEmail(),
                 publicacion.getImagenFilename()
         );
     }
