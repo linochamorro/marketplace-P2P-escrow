@@ -78,10 +78,10 @@ class DevBootstrapIntegrationTests {
                 .isEqualTo(3);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM subcategorias", Integer.class))
                 .as("el seed debe crear las subcategorías demo")
-                .isEqualTo(6);
+                .isEqualTo(7);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM publicaciones", Integer.class))
                 .as("el seed debe crear las publicaciones navegables")
-                .isEqualTo(7);
+                .isEqualTo(8);
 
         HttpRequest healthRequest = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + localServerPort + "/health"))
