@@ -42,3 +42,6 @@ yarn-error.log*
 # Evidencia de procesos (Artifacts referencian estos logs; se preservan en disco)
 *.log
 *.log.err
+
+# Configuración local de agentes (describe el flujo SDD interno; no versionar)
+opencode.json
