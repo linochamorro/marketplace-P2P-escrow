@@ -80,7 +80,7 @@ Decisiones principales: captura inmediata en lugar de auth-hold (las ventanas de
 | Componente | Tecnología |
 |---|---|
 | Backend | Java 21, Spring Boot 4.1.0, Maven 3.9.16 |
-| Frontend | React 19, Next.js 16.3.5, TypeScript 5.9 |
+| Frontend | React 19, Next.js 16.4.6, TypeScript 5.9 |
 | Base de datos | PostgreSQL 16 + Flyway |
 | Sesión | Spring Security + JWT en cookie `httpOnly; Secure; SameSite=None` |
 | Pagos | Stripe en modo sandbox, captura inmediata |

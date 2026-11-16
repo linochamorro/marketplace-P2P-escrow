@@ -6,7 +6,7 @@ Este documento describe la arquitectura **efectiva** del código versionado en e
 
 | Capa | Tecnología | Ubicación real en el repositorio |
 |---|---|---|
-| Cliente web | Next.js 16 / React 19 / TypeScript | `frontend/src/app` (rutas y paneles) |
+| Cliente web | Next.js 16.4.6 / React 19 / TypeScript | `frontend/src/app` (rutas y paneles) |
 | API | Spring Boot 4 / Java 21 / Maven | `backend/src/main` (código y recursos) |
 | Persistencia | PostgreSQL 16 + Flyway | `backend/src/main/resources/db/migration` (V1–V23) y `backend/src/main/resources/db/dev` (seed `R__seed_demo.sql`, solo perfil `dev`) |
 | Pagos | Stripe en modo sandbox, captura inmediata y webhooks firmados | Integración `stripe-java` en el backend y `Stripe.js`/PaymentElement en el cliente |
