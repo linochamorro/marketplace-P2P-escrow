@@ -40,7 +40,7 @@ services:
     environment:
       POSTGRES_DB:       easymarket_dev       # == DB_NAME en application-dev.yml
       POSTGRES_USER:     easymarket            # == DB_USER en application-dev.yml
-      POSTGRES_PASSWORD: easymarket_dev_pass   # == DB_PASSWORD en application-dev.yml
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:}   # == DB_PASSWORD en application-dev.yml (sin default; valor requerido del entorno)
     ports:
       # 5432:5432 → expone el puerto estándar al host.
       # El backend corre fuera del contenedor (mvn spring-boot:run) y se

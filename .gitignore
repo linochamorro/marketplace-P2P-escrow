@@ -9,11 +9,23 @@ Thumbs.db
 # Documentación de proceso (uso interno) — solo README.md de raíz se versiona
 *.md
 !/README.md
+!docs/architecture/*.md
+!docs/decisions/*.md
+# Galería de imágenes: el README sí es público (H-2); las PNG no son .md
+!docs/images/README.md
 
 # Proceso interno de agentes — control local
 .agents/
 docs/avance/
 docs/**/*.bak
+
+# Exclusiones F01-T05 / CA-06 — temporales y runtime privado (nunca versionar)
+# Runtime PostgreSQL privado y datos del clúster
+.local/
+# Clones y temporales de diagnóstico
+temporary/
+# Referencias de diseño Stitch, no capturas reales (CA-04)
+docs/stitch-screens/
 
 # Backend (Maven / Spring Boot)
 target/
