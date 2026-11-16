@@ -1,10 +1,10 @@
 # Galería de imágenes — EasyMarket
 
-Este directorio contiene las capturas funcionales del producto utilizadas en `README.md`.
+Este directorio contiene las capturas funcionales del producto enlazadas desde el `README.md`.
 
-## Estado
+## Origen de las capturas
 
-Las capturas reales se generaron en la tarea **F01-T04** con Playwright CLI 1.61.1 (`playwright screenshot`, Chromium) contra el entorno local aislado: PostgreSQL 16.16, backend y frontend en vivo, y datos sintéticos del seed de desarrollo. No son diseños de referencia ni `code.html` de Stitch.
+Son capturas reales obtenidas con Playwright CLI 1.61.1 (`playwright screenshot`, Chromium) contra un entorno local: PostgreSQL 16.16, backend y frontend en ejecución y datos sintéticos del seed de desarrollo. No son diseños de referencia ni maquetas estáticas.
 
 ## Capturas incluidas
 
@@ -21,12 +21,13 @@ Las capturas reales se generaron en la tarea **F01-T04** con Playwright CLI 1.61
 | `saldo-perfil.png` | Panel de saldo | 1280 × 800 |
 | `home-institucional-movil.png` | Comprobación móvil de la home | Emulación `Pixel 5` (Chromium) |
 
+Las vistas de compras, notificaciones y saldo muestran el estado vacío del seed de demostración: las transacciones de pago se crean con el flujo real de Stripe y no forman parte de la navegación local capturada.
+
 ## Reglas
 
 - Formato `.png` (salida nativa de Playwright CLI).
-- Nombres en español, minúsculas, kebab-case, descriptivos.
-- Enlaces desde README con rutas relativas: `docs/images/<archivo>.png`.
+- Nombres en español, minúsculas, kebab-case y descriptivos.
+- Enlaces desde el README con rutas relativas: `docs/images/<archivo>.png`.
 - Sin PII, credenciales, correos reales ni tokens en las capturas ni en el texto `alt`.
 - Sin loaders, overlays de error ni artefactos de herramientas de captura.
-- No publicar diseños de `docs/stitch-screens/` (`code.html`) como capturas reales.
-- Las imágenes forman parte del árbol público permitido por G-6b. Los documentos de proceso interno no se enlazan desde este árbol.
+- Solo capturas funcionales: las referencias de diseño no se publican como capturas reales.

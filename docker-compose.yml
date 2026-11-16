@@ -29,10 +29,11 @@ services:
   #   • Se evita deliberadamente el tag "latest" para garantizar builds
   #     reproducibles.
   #
-  # Credenciales: coinciden byte a byte con los valores por defecto de
-  # application-dev.yml (${DB_*:valor_por_defecto}). Si el desarrollador
-  # provee variables de entorno distintas al levantar el backend, debe
-  # replicarlas también en un archivo .env en esta carpeta (ver .env.example).
+  # Credenciales: DB_NAME/DB_USER coinciden con application-dev.yml. La
+  # contraseña NO tiene default: se exige DB_PASSWORD del entorno (misma
+  # variable que usa el backend, ver .env.example). Si el desarrollador
+  # provee valores distintos al levantar el backend, debe replicarlos en
+  # el .env local (ver .env.example). Nunca versionar la contraseña real.
   postgres:
     image: postgres:16-alpine
     container_name: easymarket_postgres_dev
@@ -40,7 +41,7 @@ services:
     environment:
       POSTGRES_DB:       easymarket_dev       # == DB_NAME en application-dev.yml
       POSTGRES_USER:     easymarket            # == DB_USER en application-dev.yml
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:}   # == DB_PASSWORD en application-dev.yml (sin default; valor requerido del entorno)
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD es requerida}   # == DB_PASSWORD en application-dev.yml; sintaxis Compose :? exige valor no vacío
     ports:
       # 5432:5432 → expone el puerto estándar al host.
       # El backend corre fuera del contenedor (mvn spring-boot:run) y se

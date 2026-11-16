@@ -46,7 +46,7 @@ El sistema está compuesto por un cliente web (Next.js/React) y una API (Spring 
 - **Disputa por la última unidad:** ante compras simultáneas gana el timestamp más temprano; el pago perdedor genera una orden durable de reembolso total, procesada sin duplicados.
 - **Reembolsos por saga con outbox:** cancelaciones y disputas a favor del comprador emiten el reembolso a Stripe con clave idempotente determinista y reintentos seguros.
 - **Webhooks verificados:** firma `Stripe-Signature` validada antes de tocar la base de datos, idempotencia por evento y por compra.
-- **Automatización por tiempos:** confirmación automática a las 48h sin respuesta, avisos de envío pendiente y avisos diarios, con hora de Perú (UTC-5).
+- **Automatización por tiempos:** confirmación automática a las 48 h sin respuesta, avisos de envío pendiente y avisos diarios, con zona horaria `America/Lima` (UTC-5).
 - **Ledger auditable:** saldo cacheado + movimientos y eventos de transacción append-only protegidos a nivel de base de datos.
 - **Catálogo moderado:** publicaciones con revisión, categorías y subcategorías, código de producto autogenerado e imágenes.
 - **Cuentas con rate limiting:** bloqueo escalado ante intentos fallidos y desbloqueo administrativo auditado.
@@ -69,7 +69,7 @@ El sistema está compuesto por un cliente web (Next.js/React) y una API (Spring 
 └──────────────┘                           └──────────────────┘
 ```
 
-Decisiones principales: captura inmediata en lugar de auth-hold (las ventanas del escrow superan la vigencia de una autorización); ledger interno en lugar de transferencias reales; temporizadores por timestamp en base de datos; migraciones Flyway versionadas con validación estricta de esquema (`ddl-auto=validate`).
+Decisiones principales: captura inmediata en lugar de auth-hold (las ventanas del escrow superan la vigencia de una autorización); ledger interno en lugar de transferencias reales; temporizadores por timestamp en base de datos; migraciones Flyway versionadas con validación estricta de esquema (`ddl-auto=validate`). El detalle está en [la arquitectura del sistema](docs/architecture/00-overview.md).
 
 > La arquitectura documentada describe el código actual del repositorio. No acredita un despliegue operativo ni la disponibilidad actual de servicios externos (Railway, Vercel, Stripe).
 
@@ -96,7 +96,7 @@ Decisiones principales: captura inmediata en lugar de auth-hold (las ventanas de
 
 **Publicación:** `pendiente_revisión` → `aprobada` · `pendiente_revisión` → `cambios_solicitados` ⇄ `pendiente_revisión` · `pendiente_revisión` → `rechazada` (editable o eliminable) · `aprobada` ⇄ `oculta` (sin stock ⇄ con stock).
 
-**Transacción:** `reservada` → `enviado` → `entregado` → `recibido` · `entregado` + 48h sin respuesta → `recibido_sin_respuesta` · `entregado` + reclamo → `disputa` → `completada` | `cancelada` · `reservada`/`enviado` + motivo → `cancelada`.
+**Transacción:** `reservada` → `enviado` → `entregado` → `recibido` · `entregado` + 48 h sin respuesta → `recibido_sin_respuesta` · `entregado` + reclamo → `disputa` → `completada` | `cancelada` · `reservada`/`enviado` + motivo → `cancelada`.
 
 Las cancelaciones y rechazos exigen motivo y cada transición queda en el log de auditoría.
 
@@ -134,99 +134,119 @@ Los errores responden `{"mensaje": "..."}`. En desarrollo hay documentación int
 - Java 21
 - Maven 3.9+
 - Node.js 20+
-- PostgreSQL 16 (local aislado para desarrollo)
-- Stripe CLI (solo para webhooks locales en modo sandbox)
-- Cuenta de Stripe en modo test (claves públicas/secretas de sandbox)
-
-> PostgreSQL local aislado y dependencias declaradas ya fueron aprobados por Lino (G-4/G-8). Docker y Stripe CLI no se instalan ni se usan en este mantenimiento por decisión expresa (ADR-001).
+- PostgreSQL 16 (servidor local aislado para desarrollo)
+- Stripe CLI y una cuenta de Stripe en modo test: **solo** cuando se ejecute la suite E2E completa o los recorridos de pago con webhooks. No son necesarios para arrancar la aplicación ni para navegar y capturar vistas localmente.
 
 ---
 
 ## Clonado y puesta en marcha
 
-1. Clona el repositorio y entra en su carpeta:
+Cada paso indica el shell y el directorio de trabajo desde el que se ejecuta.
 
-   ```bash
-   git clone https://github.com/linochamorro/marketplace-P2P-escrow.git
-   cd marketplace-P2P-escrow
-   ```
+### 1. Clonar el repositorio
 
-2. Configura las variables de entorno del backend (plantilla versionada, valores reales solo en local):
+- **Shell:** cualquiera (bash/PowerShell). **Directorio de trabajo:** el elegido para el proyecto.
 
-   ```bash
-   cp .env.example .env   # completar: DB_*, STRIPE_*, JWT_SECRET, FRONTEND_URL, ADMIN_*
-   ```
+```bash
+git clone https://github.com/linochamorro/marketplace-P2P-escrow.git
+cd marketplace-P2P-escrow
+```
 
-   Ver [.env.example](./.env.example). Los `.env` reales están ignorados por Git y nunca se versionan.
+### 2. Variables de entorno del backend
 
-3. Configura las variables de entorno del frontend:
+- **Shell:** cualquiera. **Directorio de trabajo:** raíz del repositorio.
 
-   ```bash
-   cd frontend
-   cp .env.example .env.local   # NEXT_PUBLIC_API_URL, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-   cd ..
-   ```
+```bash
+cp .env.example .env
+# Completar en .env: DB_*, STRIPE_*, JWT_SECRET, FRONTEND_URL, ADMIN_EMAIL y ADMIN_PASSWORD_HASH
+```
 
-4. Arranca PostgreSQL local aislado (puerto libre, loopback, usuario/BD exclusivos; credenciales nuevas locales, no impresas):
+Ver [.env.example](./.env.example). Los `.env` reales están ignorados por Git y nunca se versionan. `DB_PASSWORD` debe tener un valor no vacío: `docker-compose.yml` lo exige con la expresión `${DB_PASSWORD:?DB_PASSWORD es requerida}`.
 
-   ```bash
-   # Ejemplo con PostgreSQL nativo (instalado por el usuario, no por este repositorio)
-   # Crear BD y usuario: easymarket_dev / easymarket
-   # Aplicar migraciones Flyway y seed de desarrollo (perfil dev)
-   ```
+### 3. Variables de entorno del frontend
 
-   No se copia `.env`, `node_modules`, caches ni base de datos del desarrollo para que "funcione".
+- **Shell:** cualquiera. **Directorio de trabajo:** raíz del repositorio.
 
-5. Backend:
+```bash
+cd frontend
+cp .env.example .env.local
+# Completar: NEXT_PUBLIC_API_URL y NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+cd ..
+```
 
-   ```bash
-   # Cargar el .env raíz en el proceso (PowerShell, desde backend/)
-   Get-Content ..\.env | ForEach-Object {
-     if ($_ -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
-       [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
-     }
-   }
+### 4. Crear y configurar PostgreSQL 16
 
-   mvn test
-   mvn spring-boot:run
-   ```
+- **Shell:** PowerShell (o el intérprete que corresponda a tu instalación). **Directorio de trabajo:** una carpeta fuera del árbol del repositorio donde residirán el clúster y sus binarios, o el directorio `bin/` de la instalación de PostgreSQL.
 
-   Cuentas demo del seed local (configurables vía `.env`, no versionadas):
+El entorno de validación de este repositorio usó PostgreSQL **16.16 nativo** (sin contenedores), con un clúster nuevo: usuario/superusuario `easymarket`, base de datos `easymarket_dev`, puerto `5432` en `127.0.0.1` (loopback), autenticación `scram-sha-256`, codificación UTF-8 y zona horaria `America/Lima`. Comandos equivalentes, con los binarios de PostgreSQL en el `PATH`:
 
-   | Rol | Email | Password |
-   |---|---|---|
-   | Vendedor | `vendedor@easymarket.dev` | Configurar localmente |
-   | Comprador | `comprador@easymarket.dev` | Configurar localmente |
-   | Admin | vía `ADMIN_EMAIL` del `.env` | vía variable local, nunca versionada |
+```bash
+# <data> = directorio nuevo y vacío para el clúster; <pwfile> = archivo temporal con la contraseña
+initdb -D <data> -U easymarket --auth=scram-sha-256 --encoding=UTF8 --locale=C --pwfile=<pwfile>
+# En <data>/postgresql.conf: listen_addresses = '127.0.0.1'  y  port = 5432
+pg_ctl -D <data> -l <log> start
+createdb -h 127.0.0.1 -p 5432 -U easymarket easymarket_dev
+```
 
-   > Las contraseñas de demo no se documentan en texto plano en este README. Se generan localmente con BCrypt desde el `.env` y el seed.
+La contraseña se inyecta desde `DB_PASSWORD` del `.env` (por ejemplo mediante `--pwfile`), se usa un archivo temporal que debe borrarse enseguida y no se escribe en texto plano en la documentación. Comprueba el puerto libre antes de arrancar y no reutilices clústeres ni datos de otros proyectos. No se copian `.env`, dependencias ni bases de datos de otro entorno para que el proyecto "funcione".
 
-6. Frontend:
+Al arrancar el backend con perfil `dev`, Flyway crea el esquema y aplica las migraciones V1–V23 más el seed repeatable `R__seed_demo.sql` (24 migraciones en total).
 
-   ```bash
-   cd frontend
-   npm ci
-   npm run dev
-   ```
+### 5. Backend
 
-7. Webhooks de Stripe en local (sandbox, solo si se cuenta con Stripe CLI autorizado):
+- **Shell:** PowerShell. **Directorio de trabajo:** `backend/` (el `.env` de la raíz se lee con `..\.env`).
 
-   ```bash
-   stripe listen --forward-to http://localhost:8080/webhooks/stripe
-   # Copiar el whsec_... impreso a STRIPE_WEBHOOK_SECRET en el .env raíz
-   # y reiniciar el backend
-   ```
+```powershell
+cd backend
+Get-Content ..\.env | ForEach-Object {
+  if ($_ -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+    [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
+  }
+}
+mvn spring-boot:run
+```
 
-   > Sin Stripe CLI, los recorridos de pago externo quedan pendientes; las vistas de catálogo, detalle, acceso y administración son capturables sin Stripe.
+Cuentas del seed de desarrollo:
 
-8. Tests E2E con Playwright (vistas no dependientes de Stripe):
+| Rol | Email | Origen de la credencial |
+|---|---|---|
+| Vendedor | `vendedor@easymarket.dev` | Hash BCrypt insertado por `R__seed_demo.sql` |
+| Comprador | `comprador@easymarket.dev` | Hash BCrypt insertado por `R__seed_demo.sql` |
+| Admin | `ADMIN_EMAIL` del `.env` (por defecto `admin@easymarket.com`) | Hash BCrypt en `ADMIN_PASSWORD_HASH` del `.env` |
 
-   ```bash
-   cd frontend
-   npm run test:e2e
-   ```
+> El seed `R__seed_demo.sql` inserta **directamente** los hashes BCrypt de vendedor y comprador; sus contraseñas son credenciales fijas de demostración y no se documentan en texto plano ni se configuran desde el `.env`. La cuenta admin la siembra la migración `V6__seed_admin_usuario.sql` con `ADMIN_EMAIL` y `ADMIN_PASSWORD_HASH` de la configuración de desarrollo. Todas son credenciales sintéticas de demostración; no se usan en producción.
 
-   El harness valida el entorno local antes de correr los specs. Los servicios requeridos deben estar corriendo (PostgreSQL, backend `dev` y frontend).
+### 6. Frontend
+
+- **Shell:** cualquiera. **Directorio de trabajo:** `frontend/`.
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+### 7. Webhooks de Stripe en local (recorridos de pago y suite E2E)
+
+- **Shell:** cualquiera con Stripe CLI instalado. **Directorio de trabajo:** raíz del repositorio.
+
+```bash
+stripe listen --forward-to http://localhost:8080/webhooks/stripe
+# Copiar el whsec_... impreso a STRIPE_WEBHOOK_SECRET en el .env raíz y reiniciar el backend
+```
+
+La navegación y captura local de catálogo, detalle, acceso y paneles no requiere Stripe CLI. Los recorridos de pago sí dependen del reenvío de webhooks.
+
+### 8. Suite E2E completa con Playwright
+
+- **Shell:** cualquiera. **Directorio de trabajo:** `frontend/`.
+
+```bash
+cd frontend
+npm run test:e2e
+```
+
+`npm run test:e2e` ejecuta `playwright test` con un `globalSetup` que valida el entorno antes de los specs: PostgreSQL en `127.0.0.1:5432`, backend en perfil `dev` (`/health` → 200 con seed presente), CORS, frontend en `localhost:3000`, Stripe CLI reenviando a `http://localhost:8080/webhooks/stripe`, claves Stripe reales (no placeholders) en `.env` y `.env.local`, variables `ADMIN_EMAIL` y `ADMIN_PASSWORD` definidas (el harness comprueba su definición; el seed consume `ADMIN_PASSWORD_HASH`) y ausencia de secretos en archivos versionados. Por tanto, la suite completa exige **PostgreSQL, backend dev, frontend y Stripe CLI** corriendo. No debe confundirse con la navegación/captura local descrita en el paso 7, que no necesita Stripe CLI.
 
 ---
 
@@ -234,17 +254,27 @@ Los errores responden `{"mensaje": "..."}`. En desarrollo hay documentación int
 
 | Comando | Uso |
 |---|---|
-| `mvn test` | Backend: tests JUnit 5 + Testcontainers (requiere Docker; pendiente por ADR-001) |
-| `mvn spring-boot:run` | Backend: arranque en perfil dev |
+| `mvn spring-boot:run` | Backend: arranque en perfil dev contra PostgreSQL local (no requiere Docker) |
+| `mvn test` | Backend: tests JUnit 5 + Testcontainers; **requiere Docker** disponible en la máquina |
 | `npm ci` (frontend) | Frontend: instalar dependencias declaradas |
 | `npm run dev` (frontend) | Servidor de desarrollo Next.js |
 | `npm run lint` (frontend) | ESLint |
 | `npx tsc --noEmit` (frontend) | TypeScript estricto |
 | `npm test` (frontend) | Vitest + React Testing Library |
 | `npm run build` (frontend) | Build de producción |
-| `npm run test:e2e` (frontend) | Playwright E2E |
+| `npm run test:e2e` (frontend) | Suite Playwright completa; requiere PostgreSQL, backend dev, frontend y Stripe CLI (ver paso 8) |
 
-El workflow de CI (`.github/workflows/ci.yml`) ejecuta estos mismos gates en cada push y pull request: backend (JDK 21) y frontend (Node 20).
+El workflow de CI (`.github/workflows/ci.yml`) ejecuta estas mismas comprobaciones en cada push y pull request: backend (JDK 21, con Testcontainers sobre el Docker del runner) y frontend (Node 20).
+
+---
+
+## Tests
+
+Las pruebas conviven con cada aplicación; el repositorio no tiene un directorio `tests/` separado:
+
+- `backend/src/test`: JUnit 5 + Testcontainers (`mvn test` requiere Docker).
+- `frontend/src`: Vitest + React Testing Library (`npm test`).
+- `frontend/src/e2e`: specs Playwright y validación de entorno (`npm run test:e2e`, requisitos en el paso 8).
 
 ---
 
@@ -264,42 +294,35 @@ El workflow de CI (`.github/workflows/ci.yml`) ejecuta estos mismos gates en cad
 ```
 marketplace-P2P-escrow/
 ├── README.md                          # Documentación pública (este archivo)
-├── .env.example                       # Plantilla backend (ignorar valores reales)
+├── .env.example                       # Plantilla backend (no versionar valores reales)
 ├── frontend/.env.example              # Plantilla frontend
-├── docker-compose.yml                 # Referencia PostgreSQL local (INCLUIR: sin contraseña en texto plano; POSTGRES_PASSWORD sin default)
+├── docker-compose.yml                 # Referencia PostgreSQL local (DB_PASSWORD requerida, sin contraseña literal)
 ├── .github/workflows/ci.yml           # CI backend + frontend
-├── .gitignore                         # Exclusiones conforme a G-6b
+├── .gitignore                         # Exclusiones del repositorio
 ├── backend/                           # API — Java 21 + Spring Boot
 │   ├── src/main/java/.../             # controllers, services, model, repository,
 │   │                                 # security, config, dto, exception
 │   ├── src/main/resources/
 │   │   ├── application-dev.yml / application-prod.yml
-│   │   └── db/migration/              # Flyway V1–V23 · db/dev/seed solo-dev
-│   └── src/test/                      # JUnit 5 + Testcontainers
+│   │   ├── db/migration/              # Flyway V1–V23
+│   │   └── db/dev/                    # R__seed_demo.sql (solo perfil dev)
+│   └── src/test/                      # JUnit 5 + Testcontainers (ubicación real de los tests)
 ├── frontend/                          # Next.js + React + Tailwind
 │   ├── src/app/                       # Rutas y paneles (mercado, escrow, admin)
 │   ├── src/e2e/                       # Specs Playwright + validación de entorno
 │   ├── next.config.ts                 # Cabeceras de seguridad + CSP Report-Only
 │   └── .env.example
-├── docs/
-│   ├── architecture/                  # Arquitectura del sistema (docs técnico público)
-│   ├── decisions/                     # Decisiones técnicas de formato/visibilidad (docs/decisions/index.md)
-│   ├── runbooks/                      # Guías operativas (pendiente de contenido; EXCLUIR G-6b)
-│   └── sdd/                           # Constitución, especificación, plan, roadmap y paquetes (INTERNO — EXCLUIR G-6b)
-├── docs/images/                       # Capturas reales (galería integrada en README)
-├── tests/                             # Pruebas separadas (canónico pendiente de consolidación)
-├── reports/                           # Reportes de implementación, auditoría y verificación (no públicos; EXCLUIR G-6b)
-├── .agents/                           # Contratos de roles de agente (no públicos; EXCLUIR G-6b)
-└── .gitignore                         # Exclusiones conforme a G-6b
+└── docs/
+    ├── architecture/                  # Arquitectura del sistema
+    ├── decisions/                     # Decisiones técnicas de formato y visibilidad
+    └── images/                        # Capturas funcionales (galería integrada en este README)
 ```
-
-> `docs/sdd/`, `reports/`, `.agents/`, `AGENTS.md`, `STATE.md`, `DESIGN.md` y `docs/runbooks/` son documentos internos de proceso y **no** forman parte del árbol público bajo decisión G-6b. La selección de archivos públicos se rige por las exclusiones declaradas en `.gitignore` y por la decisión G-6b; no se enlaza aquí ningún documento de proceso interno.
 
 ---
 
 ## Imágenes
 
-Capturas reales del producto ejecutado localmente (PostgreSQL 16 aislado, datos sintéticos y backend/frontend en vivo), obtenidas con Playwright CLI 1.61.1 (`playwright screenshot`, Chromium). No son diseños de referencia ni `code.html` de Stitch; no muestran credenciales, tokens ni datos personales reales.
+Capturas reales del producto ejecutado localmente (PostgreSQL 16.16 aislado, datos sintéticos y backend/frontend en vivo), obtenidas con Playwright CLI 1.61.1 (`playwright screenshot`, Chromium). No son diseños de referencia ni maquetas estáticas; no muestran credenciales, tokens ni datos personales reales.
 
 ### Vistas principales
 
@@ -348,7 +371,7 @@ Capturas reales del producto ejecutado localmente (PostgreSQL 16 aislado, datos 
 
 </details>
 
-> Las vistas de compras, notificaciones y saldo reflejan el estado vacío del seed de demostración: las transacciones de pago requieren Stripe en sandbox, cuyo recorrido externo no se repite en este mantenimiento según ADR-001. Las capturas acreditan las superficies reales accesibles sin ese servicio.
+> Las vistas de compras, notificaciones y saldo reflejan el estado vacío del seed de demostración: no hay transacciones porque éstas se crean con el flujo real de pago y webhook de Stripe, que no forma parte de la navegación local capturada. Las capturas acreditan las superficies reales accesibles en ese estado.
 
 ---
 
@@ -356,9 +379,8 @@ Capturas reales del producto ejecutado localmente (PostgreSQL 16 aislado, datos 
 
 - [Arquitectura del sistema](docs/architecture/00-overview.md)
 - [Decisiones técnicas de formato y visibilidad](docs/decisions/index.md)
+- [Galería de capturas funcionales](docs/images/README.md)
 - [Estructura del repositorio](#estructura-del-repositorio)
-
-> La selección de archivos públicos se rige por las exclusiones declaradas en `.gitignore` y por la decisión G-6b. No se enlaza desde este README ningún documento de proceso interno (`docs/sdd/`, `reports/`, `.agents/`, `AGENTS.md`, `STATE.md`, `DESIGN.md`, `docs/runbooks/`).
 
 ---
 

@@ -1,11 +1,7 @@
 name: CI
 
-# Triggers (decision declarada en el Artifact PHA16TSK11-L01):
-# - push y pull_request SIN filtro de ramas: la regla 9 prohibe a este rol
-#   usar git, por lo que no puedo verificar el nombre de la rama por defecto
-#   del repo; filtrar por `main` seria asumir en silencio. Sin filtro el
-#   workflow corre en todas las ramas sin suposiciones.
-# - workflow_dispatch: permite lanzamiento manual desde la UI de GitHub.
+# Triggers: push y pull_request en cualquier rama, más lanzamiento manual
+# desde la UI de GitHub mediante workflow_dispatch.
 on:
   push:
   pull_request:
